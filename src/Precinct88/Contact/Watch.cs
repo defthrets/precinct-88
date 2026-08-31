@@ -47,6 +47,16 @@ namespace Precinct88.Contact
         private int _stillSince;
         private GTA.Math.Vector3 _stillAt;
 
+        /// <summary>
+        /// Whether a screen is up and owns the controls.
+        ///
+        /// The panel disables every control and re-enables the six it uses, so the comply key
+        /// cannot physically be pressed while it is open -- but the PROMPT would still be drawn
+        /// over the top of it, telling the player to hold a button that does nothing. Set by
+        /// Main, which is the only thing that knows what is on screen.
+        /// </summary>
+        public Func<bool> Occupied;
+
         public Watch(Settings cfg, Fleet fleet, Stop stop)
         {
             _cfg = cfg;
@@ -66,6 +76,10 @@ namespace Precinct88.Contact
             if (me == null || !me.Exists() || me.IsDead) return;
 
             Still(me, now);
+
+            // Nothing new starts behind a panel. A stop that opens while the settings are up
+            // is a scene the player misses the first ten seconds of.
+            if (Occupied != null && Occupied()) return;
 
             if (!_stop.Possible()) return;
 

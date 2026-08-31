@@ -85,6 +85,32 @@ for, and a wait — which is the only part anybody argues about, and can be set 
 
 ---
 
+## The panel — `F11`
+
+Two jobs, and the second is the reason it exists.
+
+Changing settings is the obvious one: every knob in the ini, live, written straight back to
+`Precinct88.ini` on each change with your comments and formatting intact. Arrows move and change,
+Enter toggles, Backspace closes.
+
+The other is the **status block along the bottom**, which prints what the police currently think:
+
+```
+Davis                          density 0.95   attention 0.30
+units out 3   on a call 1          vanilla police suppressed
+searching 118m -- shots fired  (description stale)   Hoodrich bridged
+```
+
+That block matters more than the settings do. The whole premise of this mod is a gap between where
+you are and where the police *believe* you are — and none of that is visible from the pavement.
+Without a readout, "the search works" and "the search silently does nothing" look identical. It is
+also the fastest way to find out whether the beat is producing cars at all.
+
+`F11` was checked rather than picked — it is free on both installs here. Change it with
+`[General] MenuKey`.
+
+---
+
 ## Install
 
 1. [ScriptHookV](http://www.dev-c.com/gtav/scripthookv/) and

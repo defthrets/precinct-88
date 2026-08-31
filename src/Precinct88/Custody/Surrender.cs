@@ -55,6 +55,16 @@ namespace Precinct88.Custody
         /// <summary>Hand the player over to Booking. Set by Main.</summary>
         public Action<Ped, string> Book;
 
+        /// <summary>
+        /// Whether a screen is up and owns the controls.
+        ///
+        /// The panel disables every control and re-enables the six it uses, so the comply key
+        /// cannot physically be pressed while it is open -- but the PROMPT would still be drawn
+        /// over the top of it, telling the player to hold a button that does nothing. Set by
+        /// Main, which is the only thing that knows what is on screen.
+        /// </summary>
+        public Func<bool> Occupied;
+
         public Surrender(Settings cfg, Manhunt hunt)
         {
             _cfg = cfg;
@@ -81,6 +91,11 @@ namespace Precinct88.Custody
             // and players stop reading prompts that do nothing.
             var officer = Nearest(me);
             if (officer == null) { _heldSince = 0; return; }
+
+            // Not while a panel owns the screen. The surrender key is a raw keyboard read
+            // rather than a game control, so unlike everything else it is NOT stopped by the
+            // panel disabling controls -- browsing the settings would hand you in.
+            if (Occupied != null && Occupied()) { _heldSince = 0; return; }
 
             // The key name spelled out, NOT a ~INPUT_...~ tag. Those expand game CONTROLS, and
             // the surrender key is a keyboard key out of the ini -- so the tag would render as

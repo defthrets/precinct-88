@@ -121,6 +121,16 @@ namespace Precinct88.Contact
         /// <summary>Hand the player to Custody. Set by Main.</summary>
         public Action<string> Book;
 
+        /// <summary>
+        /// Whether a screen is up and owns the controls.
+        ///
+        /// The panel disables every control and re-enables the six it uses, so the comply key
+        /// cannot physically be pressed while it is open -- but the PROMPT would still be drawn
+        /// over the top of it, telling the player to hold a button that does nothing. Set by
+        /// Main, which is the only thing that knows what is on screen.
+        /// </summary>
+        public Func<bool> Occupied;
+
         public Stop(Settings cfg, Manhunt hunt)
         {
             _cfg = cfg;
@@ -351,7 +361,10 @@ namespace Precinct88.Contact
             // The offer, and it is a real one. Holding the key is the only thing in this scene
             // the player has to do, and not doing it is a choice with a consequence rather
             // than a fail state.
-            Screen.Help("Hold ~INPUT_CONTEXT~ to comply.   Walk away to refuse.");
+            if (Occupied == null || !Occupied())
+            {
+                Screen.Help("Hold ~INPUT_CONTEXT~ to comply.   Walk away to refuse.");
+            }
 
             if (now - _phaseAt < 1200) return;
 
@@ -396,6 +409,11 @@ namespace Precinct88.Contact
 
             if (WalkedAway(me)) { Ran(me, "walking out of a search"); return; }
 
+            // A PANEL EATING THE KEY IS NOT LETTING GO OF IT. The settings screen disables
+            // every control, so without this, opening it mid-search reads as the player having
+            // released the button and quietly drops him back to the conversation.
+            if (Occupied != null && Occupied()) return;
+
             if (!Game.IsControlPressed(GTA.Control.Context))
             {
                 // Let go of the key mid-search. Not an escape, just back to the conversation.
@@ -404,7 +422,7 @@ namespace Precinct88.Contact
                 return;
             }
 
-            Screen.Help("Hold ~INPUT_CONTEXT~.   Let go to stop.");
+            if (Occupied == null || !Occupied()) Screen.Help("Hold ~INPUT_CONTEXT~.   Let go to stop.");
 
             Anim.Play(_officer, Anim.InspectDict, Anim.InspectClip, 1);
 

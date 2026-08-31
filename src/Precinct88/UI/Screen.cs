@@ -1,4 +1,5 @@
 using System;
+using System.Drawing;
 using GTA;
 using GTA.Native;
 using Precinct88.Core;
@@ -138,23 +139,83 @@ namespace Precinct88.UI
         /// <summary>A centred line of text, for the custody screen and nothing else.</summary>
         public static void Line(string text, float y, float scale, int alpha = 255)
         {
+            Text(text, 0.5f, y, scale, Color.FromArgb(alpha, 235, 235, 235), true);
+        }
+
+        /// <summary>
+        /// A line of text, wherever you want it.
+        ///
+        /// Font 4 throughout -- Chalet London, the one the game's own menus use. Mixing fonts
+        /// is the fastest way to make a panel look like it belongs to a different game than
+        /// the one it is drawn over.
+        /// </summary>
+        public static void Text(string text, float x, float y, float scale, Color colour,
+                                bool centred = false, bool rightAligned = false)
+        {
             if (string.IsNullOrEmpty(text)) return;
 
             try
             {
                 Function.Call(Hash.SET_TEXT_FONT, 4);
                 Function.Call(Hash.SET_TEXT_SCALE, scale, scale);
-                Function.Call(Hash.SET_TEXT_COLOUR, 235, 235, 235, alpha);
-                Function.Call(Hash.SET_TEXT_CENTRE, true);
+                Function.Call(Hash.SET_TEXT_COLOUR, colour.R, colour.G, colour.B, colour.A);
+                Function.Call(Hash.SET_TEXT_CENTRE, centred);
+
+                if (rightAligned)
+                {
+                    // RIGHT_JUSTIFY needs a wrap window or it does nothing at all, and the
+                    // window's RIGHT edge is what the text is pushed against -- so x is the
+                    // right-hand edge here, not the left. This is the single most confusing
+                    // piece of the text API and it silently no-ops when you get it wrong.
+                    Function.Call(Hash.SET_TEXT_RIGHT_JUSTIFY, true);
+                    Function.Call(Hash.SET_TEXT_WRAP, 0f, x);
+                }
+
                 Function.Call(Hash.SET_TEXT_DROP_SHADOW);
 
                 Function.Call(Hash.BEGIN_TEXT_COMMAND_DISPLAY_TEXT, "STRING");
                 Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, text);
-                Function.Call(Hash.END_TEXT_COMMAND_DISPLAY_TEXT, 0.5f, y, 0);
+                Function.Call(Hash.END_TEXT_COMMAND_DISPLAY_TEXT, x, y, 0);
             }
             catch (Exception ex)
             {
                 Log.Debug("Could not draw a line of text: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// A filled rectangle. x and y are its CENTRE, which is how the native wants it.
+        ///
+        /// Coordinates are 0..1 across the screen either way, so a width is already relative
+        /// to the screen's width and a height to its height -- which means a square is not
+        /// square. Anything that needs to be is corrected with Square below.
+        /// </summary>
+        public static void Rect(float x, float y, float w, float h, Color colour)
+        {
+            try
+            {
+                Function.Call(Hash.DRAW_RECT, x, y, w, h,
+                              colour.R, colour.G, colour.B, colour.A, false);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Could not draw a rect: " + ex.Message);
+            }
+        }
+
+        /// <summary>The width that matches a given height on this screen's aspect ratio.</summary>
+        public static float Square(float height)
+        {
+            try
+            {
+                var ratio = Function.Call<float>(Hash.GET_ASPECT_RATIO, false);
+                if (ratio < 0.1f) ratio = 16f / 9f;
+
+                return height / ratio;
+            }
+            catch
+            {
+                return height / (16f / 9f);
             }
         }
 

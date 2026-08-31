@@ -35,6 +35,7 @@ namespace Precinct88
         private readonly Watch _watch;
         private readonly Surrender _surrender;
         private readonly Booking _booking;
+        private readonly SettingsScreen _screen;
 
         private bool _parked;
         private bool _standDown;
@@ -68,17 +69,24 @@ namespace Precinct88
                 _surrender = new Surrender(_cfg, _hunt);
                 _booking = new Booking(_cfg, _hunt, _witness);
 
+                // Given the bridge as a function rather than a value, because whether Hoodrich
+                // is on the other end is not knowable yet -- its own script may not be built,
+                // and it registers a handler whenever it gets round to it.
+                _screen = new SettingsScreen(_cfg, _fleet, _hunt, () => Dispatch.Seizer != null);
+
                 Wire();
 
                 Interval = 0;
                 Tick += OnTick;
+                KeyDown += OnKey;
                 Aborted += OnAborted;
 
                 Log.Info(Build.Name + " " + Build.Version + " by " + Build.By + " loaded. " +
                          "Patrol " + OnOff(_cfg.PatrolEnabled) +
                          ", wanted " + OnOff(_cfg.WantedEnabled) +
                          ", contact " + OnOff(_cfg.ContactEnabled) +
-                         ", custody " + OnOff(_cfg.CustodyEnabled) + ".");
+                         ", custody " + OnOff(_cfg.CustodyEnabled) + ". " +
+                         _cfg.MenuKey + " opens the settings.");
             }
             catch (Exception ex)
             {
@@ -115,6 +123,16 @@ namespace Precinct88
             _stop.Book = reason => _booking.Begin(null, reason);
 
             _surrender.Book = (officer, reason) => _booking.Begin(officer, reason);
+
+            // Nothing prompts, reads a key, or starts a scene behind the panel. The panel
+            // disables the controls itself, so this is about the PROMPTS -- and about the
+            // surrender key, which is a raw keyboard read and therefore the one input the
+            // control blackout does not stop.
+            Func<bool> busy = () => _screen != null && _screen.IsOpen;
+
+            _stop.Occupied = busy;
+            _watch.Occupied = busy;
+            _surrender.Occupied = busy;
 
             // The bridge. Set last, so nothing on the other side can see a half-built mod --
             // Dispatch.Ready() is false until this line runs.
@@ -167,12 +185,50 @@ namespace Precinct88
 
         // ---- the tick ----------------------------------------------------------
 
-        private void OnTick(object sender, EventArgs e)
+        /// <summary>
+        /// The settings key.
+        ///
+        /// Deliberately NOT gated on _cfg.Enabled. Switching the mod off from inside the panel
+        /// would otherwise be a one-way door -- the key that turns it back on is the key the
+        /// disabled mod has stopped listening for. It IS gated on standing down for LSPDFR,
+        /// because in that case none of the settings do anything and a panel full of dead
+        /// switches is worse than no panel.
+        /// </summary>
+        private void OnKey(object sender, System.Windows.Forms.KeyEventArgs e)
         {
-            if (_parked || _cfg == null || !_cfg.Enabled || _standDown) return;
+            if (_parked || _cfg == null || _standDown) return;
 
             try
             {
+                if (e.KeyCode == _cfg.MenuKey) _screen.Toggle();
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Could not open the settings: " + ex.Message);
+            }
+        }
+
+        private void OnTick(object sender, EventArgs e)
+        {
+            if (_parked || _cfg == null || _standDown) return;
+
+            // THE PANEL RUNS EVEN WHEN THE MOD IS OFF, and before the early return below, for
+            // the same reason the key is not gated: the switch that turns it back on lives in
+            // here. Everything else stops.
+            //
+            // Update here and DRAW IN THE FINALLY, not together. Custody paints the whole
+            // screen black and several paths below return early, so a panel drawn at the top of
+            // the tick is a panel underneath the blackout -- open, taking input, and invisible.
+            // Drawn last it is on top of everything, which is what a panel is.
+            if (_screen != null) _screen.Update();
+
+            try
+            {
+                // INSIDE THE TRY, so the finally still draws the panel. Outside it, switching
+                // the mod off from within the panel takes the panel off the screen with it --
+                // and the switch that turns it back on is in the panel.
+                if (!_cfg.Enabled) return;
+
                 // 1. CUSTODY FIRST, AND IT SHORT-CIRCUITS EVERYTHING. A player being walked to
                 //    a car is not available to be pulled over, reported, or patrolled past, and
                 //    every one of those would fight the scene for control of the same officer.
@@ -209,6 +265,10 @@ namespace Precinct88
             catch (Exception ex)
             {
                 Log.Error("Tick failed.", ex);
+            }
+            finally
+            {
+                if (_screen != null) _screen.Draw();
             }
         }
 

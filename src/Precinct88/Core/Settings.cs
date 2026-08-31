@@ -27,6 +27,16 @@ namespace Precinct88.Core
         public LogLevel Logging = LogLevel.Info;
 
         /// <summary>
+        /// Opens the settings panel.
+        ///
+        /// F11 by default, and it was checked rather than picked: it is free on both installs
+        /// on this machine since PullMeOverRemade came out. On a Legacy install running LSPDFR
+        /// it is PlateWatch and RealNames -- but this mod stands down for LSPDFR anyway, so the
+        /// two cannot both be listening.
+        /// </summary>
+        public Keys MenuKey = Keys.F11;
+
+        /// <summary>
         /// Whether to stand down when a police framework is already running here.
         ///
         /// RAGE Plugin Hook with LSPDFR loaded is a different game -- it owns dispatch, it owns
@@ -184,6 +194,7 @@ namespace Precinct88.Core
                 s.StandDownForLspdfr = ini.GetBool("General", "StandDownForLspdfr", s.StandDownForLspdfr);
 
                 s.Logging = ini.GetEnum("General", "Logging", s.Logging);
+                s.MenuKey = ini.GetKey("General", "MenuKey", s.MenuKey);
 
                 s.PatrolEnabled = ini.GetBool("Patrol", "Enabled", s.PatrolEnabled);
                 s.PatrolUnits = (int)Clamp(ini.GetInt("Patrol", "Units", s.PatrolUnits), 0f, 12f);
