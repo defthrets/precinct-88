@@ -213,6 +213,75 @@ namespace Precinct88
             }
         }
 
+        private bool _greeted;
+
+        /// <summary>
+        /// Says it is here, once, on the first tick that can draw.
+        ///
+        /// THIS MOD IS SILENT BY DESIGN AND THAT MADE IT INDISTINGUISHABLE FROM BROKEN. Every
+        /// other mod in a scripts\ folder announces itself somehow -- a key, a menu, something
+        /// on screen. Precinct 88 changes how police behave in the background, so a correct
+        /// load and a failed load look exactly the same from the pavement, and the first
+        /// install of it was reported as "didn't load" while the log said it had started fine,
+        /// read the ini, and bridged to Hoodrich.
+        ///
+        /// On the first TICK rather than in the constructor. SHVDN builds scripts before the
+        /// game world is up, and a ticker posted then goes into a HUD that does not exist yet
+        /// -- which is the same silence, arrived at more expensively.
+        ///
+        /// It also names the key, because the panel is the only way to see any of this working.
+        /// </summary>
+        private void Hello()
+        {
+            if (_greeted) return;
+            _greeted = true;
+
+            try
+            {
+                Screen.Ticker(Build.Name + " " + Build.Version + " -- " + _cfg.MenuKey +
+                              " for settings and what the police know.");
+            }
+            catch
+            {
+                // The log already said it loaded. This is a courtesy, not a requirement.
+            }
+
+            Preflight();
+        }
+
+        /// <summary>
+        /// Checks the two things in this mod that are guessed strings, and says so.
+        ///
+        /// Camera prop names and animation dictionaries are the only things here that are not
+        /// verified by the compiler or by reflecting SHVDN. Both are DESIGNED to fail quietly --
+        /// an invalid prop model is skipped, an animation that will not load is not played --
+        /// which is right at runtime and useless when you are trying to find out whether a
+        /// feature works at all.
+        ///
+        /// So they are exercised once, at load, purely so the log answers the question without
+        /// anybody having to go and get arrested to find out. Costs about a second, once.
+        /// </summary>
+        private void Preflight()
+        {
+            try
+            {
+                if (_cfg.CamerasWatch) Cameras.Check();
+
+                foreach (var dict in new[] { Anim.HandsUpDict, Anim.CuffedDict, Anim.InspectDict })
+                {
+                    // Ready() logs its own warning on failure and is time-boxed, so a wrong
+                    // name costs under a second here rather than hanging the game.
+                    if (!Anim.Ready(dict)) continue;
+                }
+
+                Log.Info("Preflight done.");
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Preflight failed: " + ex.Message);
+            }
+        }
+
         private void OnTick(object sender, EventArgs e)
         {
             if (_parked || _cfg == null || _standDown) return;
@@ -225,6 +294,8 @@ namespace Precinct88
             // screen black and several paths below return early, so a panel drawn at the top of
             // the tick is a panel underneath the blackout -- open, taking input, and invisible.
             // Drawn last it is on top of everything, which is what a panel is.
+            Hello();
+
             if (_screen != null) _screen.Update();
 
             try

@@ -195,6 +195,18 @@ namespace Precinct88.Response
             }
         }
 
+        /// <summary>
+        /// Forces the model check at load, so the log says how many cameras exist.
+        ///
+        /// Everything here is lazy on purpose -- it is a cost nobody should pay until a crime
+        /// happens. But lazy also means the log stays silent about it until then, and "are
+        /// cameras working" is exactly the question somebody has on a first install.
+        /// </summary>
+        public static void Check()
+        {
+            Wanted();
+        }
+
         /// <summary>Drops the cached scan. For teardown and for a world reload.</summary>
         public static void Forget()
         {
