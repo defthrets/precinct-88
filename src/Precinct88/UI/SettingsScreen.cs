@@ -603,7 +603,8 @@ namespace Precinct88.UI
 
             var district = Districts.Here();
 
-            Screen.Text(district.Name + (Alleys.IsDark() ? "  (night)" : ""), left, y, NoteScale, Ink);
+            Screen.Text(district.Name + "  /  " + district.Force +
+                        (Alleys.IsDark() ? "   (night)" : ""), left, y, NoteScale, Ink);
             Screen.Text("den " + district.Density.ToString("0.00", CultureInfo.InvariantCulture) +
                         "  att " + district.Attention.ToString("0.00", CultureInfo.InvariantCulture) +
                         "  alley " + district.Alleys.ToString("0.00", CultureInfo.InvariantCulture),

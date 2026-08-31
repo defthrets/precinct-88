@@ -51,14 +51,27 @@ namespace Precinct88.Streets
         /// </summary>
         public readonly float Alleys;
 
+        /// <summary>
+        /// Which force this district belongs to. "City", "Sheriff", "Highway" or "Ranger".
+        ///
+        /// A STRING RATHER THAN A REFERENCE, so this table stays a plain list of facts about
+        /// the map with no dependency on the agency definitions -- the two files describe
+        /// different things and neither should need the other to be read.
+        ///
+        /// The ROAD can override it. See Agencies.For: a freeway is highway patrol wherever it
+        /// runs, and Mount Chiliad is rangers whichever district contains it.
+        /// </summary>
+        public readonly string Force;
+
         public District(string name, string station, float density, float attention,
-                        float alleys, params string[] zones)
+                        float alleys, string force, params string[] zones)
         {
             Name = name;
             Station = station;
             Density = density;
             Attention = attention;
             Alleys = alleys;
+            Force = force;
             Zones = zones;
         }
     }
@@ -78,7 +91,7 @@ namespace Precinct88.Streets
     {
         /// <summary>Nowhere in particular. Nothing patrols here and nothing responds quickly.</summary>
         public static readonly District Unpoliced =
-            new District("Unpoliced", "Mission Row", 0f, 0.15f, 0f);
+            new District("Unpoliced", "Mission Row", 0f, 0.15f, 0f, "City");
 
         private static readonly District[] All =
         {
@@ -93,44 +106,44 @@ namespace Precinct88.Streets
             // Downtown. The busiest ground in the game and the station everybody knows, and
             // Skid Row and the Textile City service lanes are some of the densest alley
             // network in the map.
-            new District("Mission Row", "Mission Row", 1.00f, 0.55f, 0.55f,
+            new District("Mission Row", "Mission Row", 1.00f, 0.55f, 0.55f, "City",
                          "DOWNT", "LEGSQU", "TEXTI", "SKID", "PBOX", "STRAW", "MISSION"),
 
             // South. Cars everywhere, and none of them care -- which is the whole point of
             // running a corner down here rather than in Rockford. Almost all of Davis and
             // Rancho is back lanes behind low housing, which is exactly what this is for.
-            new District("Davis", "Davis", 0.95f, 0.30f, 0.70f,
+            new District("Davis", "Davis", 0.95f, 0.30f, 0.70f, "City",
                          "DAVIS", "RANCHO", "CHAMH", "CYPRE", "SLAB"),
 
             // East industrial. Quiet, and quiet in a way that means nobody is coming -- and
             // nothing in the game has more service road per square metre than Cypress Flats
             // and El Burro.
-            new District("La Mesa", "La Mesa", 0.55f, 0.35f, 0.75f,
+            new District("La Mesa", "La Mesa", 0.55f, 0.35f, 0.75f, "City",
                          "LMESA", "EBURO", "MURRI", "ELYSIAN", "TERMINA", "PROCOB"),
 
             // The beach. Heavy foot traffic, light policing, and a lot of it on foot. Little
             // Seoul and the Vespucci strip have real rear access behind the shopfronts; the
             // canals and the sand have none, which is what pulls the figure down.
-            new District("Vespucci", "Vespucci", 0.70f, 0.40f, 0.40f,
+            new District("Vespucci", "Vespucci", 0.70f, 0.40f, 0.40f, "City",
                          "VESP", "VCANA", "DELPE", "KOREAT", "LOSPUER", "PBLUFF"),
 
             // Money. You will not see many, and the one you see has already noticed you.
             // Deliberately the lowest: these are driveways and private roads, not alleys, and
             // a squad car creeping down one is a different mod.
-            new District("Rockford Hills", "Rockford Hills", 0.35f, 0.85f, 0.15f,
+            new District("Rockford Hills", "Rockford Hills", 0.35f, 0.85f, 0.15f, "City",
                          "ROCKF", "BURTON", "MORN", "RICHM", "GOLF", "BHAMCA", "BANHAMC"),
 
             // Vinewood. Tourists, cameras, and a force that behaves accordingly. The Blvd
             // back lots and the studio service roads are the alleys here.
-            new District("Vinewood", "Vinewood", 0.65f, 0.60f, 0.40f,
+            new District("Vinewood", "Vinewood", 0.65f, 0.60f, 0.40f, "City",
                          "VINE", "WVINE", "DTVINE", "HAWICK", "ALTA", "MOVIE", "RGLEN", "TONGVAH"),
 
             // North of the city. Sparse and slow, and everybody local knows it. Off the
             // tarmac this is dirt track rather than alley -- see the note at the top.
-            new District("Sandy Shores", "Sandy Shores", 0.30f, 0.35f, 0.30f,
+            new District("Sandy Shores", "Sandy Shores", 0.30f, 0.35f, 0.30f, "Sheriff",
                          "SANDY", "GRAPES", "ALAMO", "HARMO", "CCREAK", "LAGO", "MTGORDO"),
 
-            new District("Paleto Bay", "Paleto Bay", 0.25f, 0.40f, 0.30f,
+            new District("Paleto Bay", "Paleto Bay", 0.25f, 0.40f, 0.30f, "Sheriff",
                          "PALETO", "PALFOR", "PALCOV", "MTCHIL", "CHIL", "BRADP", "BRADT"),
         };
 

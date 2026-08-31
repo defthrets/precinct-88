@@ -102,6 +102,9 @@ namespace Precinct88.Streets
         /// <summary>Whether this leg is down the back of things rather than on a road.</summary>
         public bool OnABackStreet;
 
+        /// <summary>Which force this car belongs to. For the log and the panel.</summary>
+        public string Force = "LSPD";
+
         private Vector3 _wasAt;
         private int _lookedAt;
         private int _nudges;

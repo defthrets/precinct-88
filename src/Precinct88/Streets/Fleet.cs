@@ -400,7 +400,14 @@ namespace Precinct88.Streets
         {
             try
             {
-                var carModel = Cops.Load(Cops.Cars[_rng.Next(Cops.Cars.Length)]);
+                // WHO POLICES HERE, rather than one cruiser everywhere. A sheriff in Blaine
+                // County, highway patrol on the freeway, a ranger on the mountain.
+                var force = Agencies.For(beat, spot, _rng);
+
+                var wantCar = force.Car(_rng);
+                if (wantCar == null) return null;
+
+                var carModel = Cops.Load(force.Name + " car", wantCar);
                 if (carModel == null) return null;
 
                 var car = World.CreateVehicle(carModel.Value, spot, heading);
@@ -415,6 +422,7 @@ namespace Precinct88.Streets
                 {
                     Car = car,
                     Beat = beat,
+                    Force = force.Name,
                     OffDutyAt = now + (int)(_cfg.BeatMinutes * 60000f),
 
                     // Rolled once and kept. Two officers who look at everybody, or two who
@@ -425,9 +433,17 @@ namespace Precinct88.Streets
                 // Two of them. One officer in a squad car is a mod that could not be bothered,
                 // and it matters the moment somebody gets out: a stop with nobody left in the
                 // car reads completely differently to a stop with a partner still in it.
-                for (var seat = -1; seat <= 0; seat++)
+                // A BIKE HAS ONE SEAT. Highway patrol ride them, and asking for a passenger on
+                // a motorcycle puts an officer through the frame or silently fails -- either
+                // way it is a second man this unit does not have.
+                var seats = car.PassengerCapacity >= 1 ? 0 : -1;
+
+                for (var seat = -1; seat <= seats; seat++)
                 {
-                    var pedModel = Cops.Load(Cops.Uniforms[_rng.Next(Cops.Uniforms.Length)]);
+                    var wantPed = force.Ped(_rng);
+                    if (wantPed == null) continue;
+
+                    var pedModel = Cops.Load(force.Name + " uniform", wantPed);
                     if (pedModel == null) continue;
 
                     var who = car.CreatePedOnSeat((VehicleSeat)seat, pedModel.Value);

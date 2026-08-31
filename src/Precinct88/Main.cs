@@ -269,6 +269,10 @@ namespace Precinct88
             {
                 if (_cfg.CamerasWatch) Cameras.Check();
 
+                // Which forces this install can actually field. Model names are guesses and
+                // this is the line that turns "I never see a sheriff" into an answer.
+                Agencies.Check();
+
                 // The art is the one thing that can be missing without anything failing -- a
                 // HUD icon that does not load simply does not draw, which looks exactly like a
                 // state the mod never entered. Counted at load so the log answers it.

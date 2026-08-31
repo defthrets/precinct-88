@@ -199,9 +199,21 @@ namespace Precinct88.Core
         /// </summary>
         public static Model? Load(string name, int waitMs = 1200)
         {
+            return Load(name, null, waitMs);
+        }
+
+        /// <summary>
+        /// The same, when the caller already has the Model and only wants it streamed in.
+        ///
+        /// Agencies resolve and cache their own valid models, so re-deriving one from a name
+        /// there would throw away the validity check that was the whole point of caching it.
+        /// The name is still taken, purely so a failure has something readable to log.
+        /// </summary>
+        public static Model? Load(string name, Model? known, int waitMs = 1200)
+        {
             try
             {
-                var model = new Model(name);
+                var model = known ?? new Model(name);
                 if (!model.IsValid) return null;
 
                 model.Request();
