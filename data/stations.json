@@ -1,0 +1,70 @@
+{
+  "_comment": [
+    "Where the force lives. This file OVERRIDES the built-in table, station by station --",
+    "name one and only that one moves, leave one out and it keeps the built-in position.",
+    "A malformed file moves none of them and the mod still runs.",
+    "",
+    "The coordinates are allowed to be roughly wrong. Nothing spawns AT one of these: every",
+    "car comes out of the nearest real road node, found with the game's own pathfinding, so a",
+    "point half a block off produces a car on the correct street rather than a car in a wall.",
+    "",
+    "'where' is roughly the building. 'desk' is where a booked player is stood after the doors",
+    "close, and wants to be somewhere you can actually stand -- inside the lobby where there is",
+    "one you can walk into without an interiors mod, and on the pavement at the front door",
+    "where there is not.",
+    "",
+    "These have NOT been walked in-game yet. If a release puts you inside a wall, this is the",
+    "file to fix, and fixing it needs no rebuild."
+  ],
+
+  "stations": [
+    {
+      "name": "Mission Row",
+      "where": { "x": 425.1, "y": -979.5, "z": 30.7 },
+      "desk": { "x": 441.0, "y": -978.9, "z": 30.7 },
+      "deskHeading": 90.0
+    },
+    {
+      "name": "Davis",
+      "where": { "x": 359.0, "y": -1584.7, "z": 29.3 },
+      "desk": { "x": 363.0, "y": -1592.0, "z": 29.3 },
+      "deskHeading": 230.0
+    },
+    {
+      "name": "La Mesa",
+      "where": { "x": 827.5, "y": -1290.0, "z": 28.2 },
+      "desk": { "x": 831.0, "y": -1288.0, "z": 28.2 },
+      "deskHeading": 180.0
+    },
+    {
+      "name": "Vespucci",
+      "where": { "x": -1108.4, "y": -845.5, "z": 19.3 },
+      "desk": { "x": -1102.0, "y": -840.0, "z": 19.3 },
+      "deskHeading": 30.0
+    },
+    {
+      "name": "Rockford Hills",
+      "where": { "x": -561.5, "y": -131.6, "z": 38.0 },
+      "desk": { "x": -565.0, "y": -139.0, "z": 38.0 },
+      "deskHeading": 200.0
+    },
+    {
+      "name": "Vinewood",
+      "where": { "x": 629.5, "y": 6.6, "z": 82.8 },
+      "desk": { "x": 636.0, "y": 12.0, "z": 82.8 },
+      "deskHeading": 60.0
+    },
+    {
+      "name": "Sandy Shores",
+      "where": { "x": 1853.2, "y": 3686.6, "z": 34.2 },
+      "desk": { "x": 1856.0, "y": 3680.0, "z": 34.2 },
+      "deskHeading": 210.0
+    },
+    {
+      "name": "Paleto Bay",
+      "where": { "x": -448.7, "y": 6012.0, "z": 31.7 },
+      "desk": { "x": -443.0, "y": 6015.0, "z": 31.7 },
+      "deskHeading": 45.0
+    }
+  ]
+}
