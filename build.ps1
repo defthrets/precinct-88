@@ -32,6 +32,19 @@ param(
     [ValidateSet('Legacy', 'Enhanced', 'Both')]
     [string]$Target = 'Both',
 
+    # Deploy while the game is running, for a hot reload.
+    #
+    # Normally refused, and the refusal is right for asset mods -- but this is one dll and one
+    # ini, and ScriptHookVDotNet SHADOW-COPIES the assembly before running it. The file in
+    # scripts\ is therefore not locked, and replacing it then pressing Insert reloads the mod
+    # in place without leaving the game.
+    #
+    # Safe here specifically because the Aborted handler hands everything back before the
+    # reload: the wanted ceiling, the dispatch services, police attention and the vanilla cop
+    # generator all go home, and the criminal profile is written out. A mod that leaked any of
+    # those on unload would not be safe to hot swap, and this one is tested on exactly that.
+    [switch]$HotSwap,
+
     [string]$GtaDir = 'C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V',
     [string]$EnhancedDir = 'C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V Enhanced',
 
@@ -206,7 +219,19 @@ function Deploy-To([string]$dir, [string]$label) {
 
 if ($Deploy) {
     $running = Get-Process GTA5, GTA5_Enhanced -ErrorAction SilentlyContinue
-    if ($running) { throw "GTA V is running - close it before deploying." }
+
+    if ($running -and -not $HotSwap) {
+        throw "GTA V is running - close it before deploying, or pass -HotSwap and press Insert."
+    }
+
+    if ($running -and $HotSwap) {
+        Write-Host "GTA V is running; hot swapping. Press Insert in game to reload scripts." -ForegroundColor Yellow
+
+        # The ini is read in the constructor, so a reload picks up edits to it as well -- but
+        # only keys that are actually IN the installed file. A brand new option still needs
+        # adding by hand, or setting from the panel, which writes it.
+        Write-Host "  note   new ini options only apply once they exist in the installed ini" -ForegroundColor DarkGray
+    }
 
     if ($Target -in 'Legacy', 'Both')   { Deploy-To $GtaDir      'Legacy' }
     if ($Target -in 'Enhanced', 'Both') { Deploy-To $EnhancedDir 'Enhanced' }
