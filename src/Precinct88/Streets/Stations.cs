@@ -218,6 +218,68 @@ namespace Precinct88.Streets
         }
 
         /// <summary>
+        /// The kerb beside a road node, for something that wants to stop without blocking it.
+        ///
+        /// A VEHICLE NODE IS THE MIDDLE OF THE CARRIAGEWAY, not the side of it. That is correct
+        /// for driving to and completely wrong for stopping at, and taking a node as a place to
+        /// park is what put a patrol car across a lane on Cypress with its lights on and a
+        /// queue behind it. The node is where traffic goes; the kerb is where a car waits.
+        ///
+        /// GET_ROAD_BOUNDARY_USING_HEADING is the game's own answer for where the road stops.
+        /// Pulled back in from it so the car sits ON the tarmac at the edge rather than half up
+        /// the pavement, and clamped, because on a wide junction the boundary can be a long way
+        /// off and a car parked twelve metres sideways is in somebody's garden.
+        /// </summary>
+        public static Vector3 Kerb(Vector3 node, float heading)
+        {
+            try
+            {
+                var edge = new OutputArgument();
+
+                if (Function.Call<bool>(Hash.GET_ROAD_BOUNDARY_USING_HEADING,
+                                        node.X, node.Y, node.Z, heading, edge))
+                {
+                    var at = edge.GetResult<Vector3>();
+
+                    var over = at - node;
+                    over.Z = 0f;
+
+                    var wide = over.Length();
+
+                    if (wide > 1.2f && wide < 14f)
+                    {
+                        over.Normalize();
+
+                        // A metre and a half back off the edge. Enough to be out of the lane,
+                        // not so much that it is on the kerb.
+                        return at - over * 1.5f;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("No road boundary near " + node + ": " + ex.Message);
+            }
+
+            // No boundary, or a silly one. Offset to the right of the road instead, which is
+            // the correct side to pull over on and is better than the middle either way.
+            try
+            {
+                var rad = heading * (float)(Math.PI / 180d);
+
+                // Heading is degrees clockwise from north, so forward is (-sin, cos) and the
+                // right-hand side of it is (cos, sin).
+                var right = new Vector3((float)Math.Cos(rad), (float)Math.Sin(rad), 0f);
+
+                return node + right * 3.2f;
+            }
+            catch
+            {
+                return node;
+            }
+        }
+
+        /// <summary>
         /// A real road node beside a station, with the heading the road runs in.
         ///
         /// This is the piece that makes the coordinates above forgiving. GET_CLOSEST_VEHICLE_

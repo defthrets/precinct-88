@@ -168,12 +168,12 @@ namespace Precinct88.Streets
 
                         if (unit.StopThere)
                         {
-                            unit.Doing = Duty.Sitting;
-                            unit.MoveOnAt = now + SitMinMs + _rng.Next(SitMaxMs - SitMinMs);
-                            unit.Lights(false);
+                            // Parked at the KERB rather than stopped on the node it drove to.
+                            // A node is the middle of the carriageway; see Stations.Kerb.
+                            var until = now + SitMinMs + _rng.Next(SitMaxMs - SitMinMs);
 
-                            try { unit.Driver.Task.ClearAll(); }
-                            catch { /* it will be re-tasked when it moves on */ }
+                            unit.PullIn(Stations.Kerb(unit.Target, unit.Car.Heading),
+                                        unit.Car.Heading, until);
                         }
                         else
                         {

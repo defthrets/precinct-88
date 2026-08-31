@@ -155,6 +155,44 @@ namespace Precinct88.Streets
             Roll(to, false);
         }
 
+        /// <summary>
+        /// Pulls in and waits, instead of stopping dead where it happens to be.
+        ///
+        /// THE OLD VERSION CLEARED THE DRIVER'S TASKS, which is a hard stop wherever the car is
+        /// standing -- and since it was driving to a vehicle NODE, wherever it was standing was
+        /// the middle of the carriageway. A squad car across a live lane with its light bar on
+        /// and traffic backed up behind it, for up to forty-six seconds.
+        ///
+        /// TASK_VEHICLE_PARK does the geometry properly. Mode 3 is the pull-in-and-stop one and
+        /// the radius gives it room to find something workable; the engine is left running,
+        /// because an officer sitting watching a street does not switch off.
+        ///
+        /// If the park task will not take, the fallback is to keep DRIVING rather than to stop
+        /// dead. A car still moving is never the bug this is fixing.
+        /// </summary>
+        public void PullIn(Vector3 kerb, float heading, int until)
+        {
+            Doing = Duty.Sitting;
+            MoveOnAt = until;
+            Target = kerb;
+
+            Lights(false);
+
+            try
+            {
+                if (!Alive) return;
+
+                Function.Call(Hash.TASK_VEHICLE_PARK,
+                              Driver.Handle, Car.Handle,
+                              kerb.X, kerb.Y, kerb.Z, heading,
+                              3, 20f, true);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Could not park a unit: " + ex.Message);
+            }
+        }
+
         public void StandDown(Vector3 goHome)
         {
             Doing = Duty.StandingDown;
