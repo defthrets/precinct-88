@@ -226,5 +226,14 @@ namespace Precinct88.Core
         public static string LogFile => Path.Combine(Writable, "Precinct88.log");
         public static string SaveFile => Path.Combine(Writable, "record.json");
         public static string StationsFile => Path.Combine(Data, "stations.json");
+
+        /// <summary>
+        /// The HUD art, beside the data rather than loose in scripts\.
+        ///
+        /// Read-only as far as this mod is concerned, so it hangs off Data and not Writable --
+        /// a player whose game folder is unwritable still has the icons, because the deploy put
+        /// them there.
+        /// </summary>
+        public static string Icons => Path.Combine(Data, "icons");
     }
 }

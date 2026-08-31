@@ -139,7 +139,8 @@ namespace Precinct88.Custody
                 Log.Debug("Could not start a surrender: " + ex.Message);
             }
 
-            Screen.Ticker("Hands up.");
+            // The figure with its arms up is on the HUD for as long as this lasts. Saying it
+            // once in a ticker was the weaker half of that.
             Log.Info("Player surrendered.");
         }
 

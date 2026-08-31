@@ -354,18 +354,17 @@ namespace Precinct88.Response
                 _searchRadius = 40f;
                 _searchStarted = now;
 
-                if (State != Hunt.Seen)
-                {
-                    State = Hunt.Seen;
-                    if (Say != null) Say("Dispatch: suspect sighted.");
-                }
+                // NOT ANNOUNCED. "Suspect sighted" is a STATE, and the HUD shows states -- the
+                // eye icon is up for exactly as long as it is true, which a ticker line that
+                // scrolls away after four seconds never was.
+                State = Hunt.Seen;
             }
             else if (State == Hunt.Seen && now - _lastSeenAt > LostAfterMs)
             {
                 State = Hunt.Searching;
                 _searchStarted = now;
 
-                if (Say != null) Say("Dispatch: lost visual. Searching the area.");
+                // Also a state, also on the HUD. The eye becomes a magnifier.
                 Log.Debug("Lost visual; search from " + Districts.ZoneAt(_searchFrom) + ".");
             }
 

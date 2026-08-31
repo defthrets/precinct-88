@@ -36,7 +36,7 @@ namespace Precinct88
         private readonly Surrender _surrender;
         private readonly Booking _booking;
         private readonly SettingsScreen _screen;
-        private readonly KnownStrip _strip;
+        private readonly Hud _hud;
         private readonly Spotlight _beam;
 
         private bool _parked;
@@ -75,7 +75,7 @@ namespace Precinct88
                 // is on the other end is not knowable yet -- its own script may not be built,
                 // and it registers a handler whenever it gets round to it.
                 _screen = new SettingsScreen(_cfg, _fleet, _hunt, () => Dispatch.Seizer != null);
-                _strip = new KnownStrip(_cfg, _hunt);
+                _hud = new Hud(_cfg, _hunt, _stop, _booking, _surrender);
                 _beam = new Spotlight(_cfg, _fleet);
 
                 // The one thing in this mod that outlives a session.
@@ -269,6 +269,15 @@ namespace Precinct88
             {
                 if (_cfg.CamerasWatch) Cameras.Check();
 
+                // The art is the one thing that can be missing without anything failing -- a
+                // HUD icon that does not load simply does not draw, which looks exactly like a
+                // state the mod never entered. Counted at load so the log answers it.
+                var art = Art.Check("seen.png", "search.png", "noid.png", "face.png", "fit.png",
+                                    "car.png", "gun.png", "cam.png", "cuffs.png", "hands.png",
+                                    "stop.png", "badge.png");
+
+                Log.Info("HUD art: " + art + " of 12 icon(s) present.");
+
                 foreach (var dict in new[] { Anim.HandsUpDict, Anim.CuffedDict, Anim.InspectDict })
                 {
                     // Ready() logs its own warning on failure and is time-boxed, so a wrong
@@ -345,7 +354,7 @@ namespace Precinct88
 
                 // Drawn after the systems have run, so it shows this frame's answer rather
                 // than last frame's. Under the panel, which draws in the finally below.
-                if (_strip != null) _strip.Draw();
+                if (_hud != null) _hud.Draw();
 
                 // EVERY FRAME, and that is the point of it being here rather than on a tick.
                 // The fleet ticks at 750ms and a light drawn at that rate is a strobe.

@@ -181,7 +181,9 @@ namespace Precinct88.Contact
             {
                 unit.Lights(true);
                 Cops.Megaphone(unit.Driver, "COP_ARREST_PLAYER");
-                Screen.Ticker("Pull over.");
+
+                // No ticker. The octagon on the HUD says a stop is happening for as long as one
+                // is, and the lights in the mirror say it better than either.
             }
             else
             {
@@ -463,8 +465,8 @@ namespace Precinct88.Contact
             }
 
             // Nothing. He gets a word and that is the whole of it -- which is the outcome that
-            // makes the other one mean anything.
-            Screen.Ticker("Nothing on you. Move along.");
+            // makes the other one mean anything. Said out loud rather than tickered, because
+            // somebody is standing in front of you saying it.
             Screen.Said("Alright. On your way.");
             Cops.Say(_officer, "GENERIC_BYE");
 
@@ -474,7 +476,6 @@ namespace Precinct88.Contact
         /// <summary>The player left. The stop becomes the thing they left.</summary>
         private void Ran(Ped me, string what)
         {
-            Screen.Ticker("Dispatch: suspect is not complying.");
 
             var worse = _why == Why.Weapon ? Offence.Brandishing
                       : _why == Why.Driving ? Offence.Reckless
