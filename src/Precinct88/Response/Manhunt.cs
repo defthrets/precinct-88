@@ -94,7 +94,6 @@ namespace Precinct88.Response
         private int _searchStarted;
 
         private int _pushedStars = -1;
-        private bool _dispatchSet;
 
         /// <summary>
         /// Where the last incident happened, and for how long it is still a place with police
@@ -666,54 +665,66 @@ namespace Precinct88.Response
         }
 
         /// <summary>
-        /// What the game is allowed to send, by what was actually done.
+        /// What the crime justifies, told to the one place that owns the engine's police.
         ///
-        /// ENABLE_DISPATCH_SERVICE, not SET_DISPATCH_SERVICE_ACTIVE -- the latter is not in
-        /// SHVDN 3.9's Hash enum, which is the sort of thing that is only ever found by
-        /// reflecting the assembly.
+        /// THIS USED TO PUSH THE NATIVES ITSELF and that was the bug the whole mod was losing
+        /// to. It gated services 2, 4, 12 and 14 -- the helicopters, SWAT and the army -- and
+        /// left service 1, the engine's ordinary police car dispatch, fully switched on. So
+        /// the moment the player had a star the game began creating squad cars behind him for
+        /// the purpose, while the Fleet was carefully reassigning one that had been three
+        /// streets away. Both systems responding, neither aware of the other, and the entire
+        /// argument of this mod invisible underneath the result.
         ///
-        /// The service numbers are the game's own: 2 is the police helicopter, 4 SWAT, 12 the
-        /// SWAT helicopter, 14 the army. Turning them off by severity is what stops a police
-        /// chase over a stolen car from ending with a Buzzard, which happens in vanilla at four
-        /// stars regardless of what the four stars were for.
+        /// AmbientCops now owns every police dispatch service, and all this does is say what
+        /// the current incident is worth. One system, one native, one place to look.
+        ///
+        /// The helicopter and SWAT are still gated by severity, and that is still the thing
+        /// that stops a chase over a stolen car ending with a Buzzard the way vanilla does at
+        /// four stars regardless of what the four stars were for.
         /// </summary>
         private void PushDispatch()
         {
-            var air = _worst != null && _worst.Air;
-            var swat = _worst != null && _worst.Swat;
+            Streets.AmbientCops.Allow(_worst != null && _worst.Air,
+                                      _worst != null && _worst.Swat);
 
-            try
+            // How much of the force this is worth, handed to the Fleet, because with the
+            // engine's dispatch off the Fleet is now the ONLY thing that can answer a call.
+            // Without this the beat stays at three cars during a homicide.
+            if (_fleet != null)
             {
-                Function.Call(Hash.ENABLE_DISPATCH_SERVICE, 2, air);    // police helicopter
-                Function.Call(Hash.ENABLE_DISPATCH_SERVICE, 12, swat);  // SWAT helicopter
-                Function.Call(Hash.ENABLE_DISPATCH_SERVICE, 4, swat);   // SWAT on the road
-                Function.Call(Hash.ENABLE_DISPATCH_SERVICE, 14, false); // army, never
-
-                _dispatchSet = true;
-            }
-            catch (Exception ex)
-            {
-                Log.Debug("Could not gate dispatch: " + ex.Message);
+                _fleet.Surge = Surge();
+                _fleet.SurgeTo = State == Hunt.Seen ? _searchFrom : _searchFrom;
             }
         }
 
-        /// <summary>Hands every dispatch service back. On clearing, and on teardown.</summary>
+        /// <summary>
+        /// Extra cars the incident is worth, on top of the district's ordinary beat.
+        ///
+        /// Deliberately gentle at the bottom and steep at the top. One star is a beat car
+        /// noticing you and nothing else needs to happen; five is everything there is. The
+        /// numbers are small because these are REAL cars that have to drive to you -- six
+        /// units converging from across a district is a great deal more presence than six
+        /// spawned behind you, and it takes longer to arrive, which is the point.
+        /// </summary>
+        private int Surge()
+        {
+            switch (_pushedStars)
+            {
+                case 0:
+                case 1: return 0;
+                case 2: return 1;
+                case 3: return 2;
+                case 4: return 4;
+                default: return 6;
+            }
+        }
+
+        /// <summary>Stands the surge down. On clearing, and on teardown.</summary>
         public void RestoreDispatch()
         {
-            if (!_dispatchSet) return;
-            _dispatchSet = false;
+            Streets.AmbientCops.Allow(false, false);
 
-            try
-            {
-                foreach (var service in new[] { 2, 4, 12, 14 })
-                {
-                    Function.Call(Hash.ENABLE_DISPATCH_SERVICE, service, true);
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Debug("Could not restore dispatch: " + ex.Message);
-            }
+            if (_fleet != null) _fleet.Surge = 0;
         }
     }
 }

@@ -77,8 +77,37 @@ namespace Precinct88.Core
         /// </summary>
         public bool SuppressVanillaPatrols = true;
 
+        /// <summary>
+        /// Whether this mod is the ONLY thing that sends police.
+        ///
+        /// Switches off the engine's dispatch entirely, so no squad car is ever created because
+        /// you have a wanted level -- every unit that reaches you was already on the road and
+        /// had to drive. This is the setting that makes the mod actually work; with it off, the
+        /// game's dispatch runs alongside and floods over everything the Fleet does.
+        ///
+        /// Off is for somebody who wants the beat and the wanted rework layered on top of
+        /// vanilla response rather than instead of it.
+        /// </summary>
+        public bool OwnDispatch = true;
+
         /// <summary>Minutes before a unit has finished its round and goes home.</summary>
         public float BeatMinutes = 11f;
+
+        /// <summary>
+        /// How much patrolling goes down the backs of things, over the district figure.
+        ///
+        /// A multiplier rather than a value: each district already has its own opinion, and
+        /// this scales all of them at once. 0 keeps patrols on the main roads entirely.
+        /// </summary>
+        public float AlleyPatrol = 1f;
+
+        /// <summary>
+        /// The beam out of the driver's window after dark.
+        ///
+        /// Drawn per frame rather than switched on, because a police car in this game has no
+        /// searchlight the engine will turn on for you.
+        /// </summary>
+        public bool Spotlights = true;
 
         /// <summary>
         /// Whether units drive out of a station rather than fading in down the street.
@@ -232,6 +261,9 @@ namespace Precinct88.Core
                                                        s.SuppressVanillaPatrols);
                 s.BeatMinutes = Clamp(ini.GetFloat("Patrol", "BeatMinutes", s.BeatMinutes), 1f, 60f);
                 s.FromStations = ini.GetBool("Patrol", "FromStations", s.FromStations);
+                s.OwnDispatch = ini.GetBool("Patrol", "OwnDispatch", s.OwnDispatch);
+                s.AlleyPatrol = Clamp(ini.GetFloat("Patrol", "AlleyPatrol", s.AlleyPatrol), 0f, 2f);
+                s.Spotlights = ini.GetBool("Patrol", "Spotlights", s.Spotlights);
 
                 s.WantedEnabled = ini.GetBool("Wanted", "Enabled", s.WantedEnabled);
                 s.LastKnownSeconds = Clamp(ini.GetFloat("Wanted", "LastKnownSeconds",

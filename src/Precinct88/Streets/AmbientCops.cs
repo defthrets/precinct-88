@@ -6,45 +6,90 @@ using Precinct88.Core;
 namespace Precinct88.Streets
 {
     /// <summary>
-    /// Turning off the game's own police generator, which is the reason vanilla policing feels
-    /// the way it does.
+    /// The engine's own police, and the single place they are switched off.
     ///
-    /// The generator is not a spawner in the ordinary sense -- it is a density target. The
-    /// engine looks at how much police presence the current area is supposed to have and
-    /// creates cars until it is met, anywhere out of your immediate view. That is why a squad
-    /// car appears behind you on an empty road at three in the morning, and it is why no amount
-    /// of careful spawning on top of it produces a coherent force: our cars and its cars are
-    /// both counted, so the harder this mod works the more crowded the streets get.
+    /// THERE ARE TWO SEPARATE ENGINE SYSTEMS HERE AND SUPPRESSING ONLY THE FIRST IS WHY THE MOD
+    /// DID NOT WORK.
     ///
-    /// So it is switched off and the Fleet becomes the only source of police in the world.
+    /// The first is the AMBIENT GENERATOR: a density target that creates squad cars out of view
+    /// until an area's police presence is met. It is why one appears behind you on an empty road
+    /// at three in the morning, and SET_CREATE_RANDOM_COPS turns it off.
     ///
-    /// RE-ASSERTED EVERY FEW SECONDS, NOT SET ONCE. The game resets these on a mission
-    /// starting, a cutscene, a load, an area transition and a few other things nothing gets
-    /// told about -- and a suppression that quietly lapses looks exactly like a mod that never
-    /// worked. Hoodrich learned this the expensive way with its wanted-level hold: the natives
-    /// were pushed at the start of a gang war and whatever happened to them after that stood.
+    /// The second is DISPATCH, and it is the one that matters. The moment you have a wanted
+    /// level the engine starts sending units at you -- created for the purpose, arriving having
+    /// existed for four seconds, from wherever is convenient. That is precisely the behaviour
+    /// this mod replaces, and it was left running: the Fleet would carefully reassign a car that
+    /// was already three streets away while the engine conjured two more behind the player. Both
+    /// responding, neither aware of the other, and the whole argument of the mod invisible
+    /// underneath it.
     ///
-    /// Nothing existing is deleted. Officers already on the street were put there by something
-    /// -- possibly a mission, possibly another mod -- and a system that goes round removing
-    /// police it did not create will eventually delete one that a story mission needed.
+    /// So every police dispatch service is off and the Fleet is the only source of police in the
+    /// world. Fire and ambulance are deliberately left alone -- they are not police, and killing
+    /// them breaks things that have nothing to do with this.
+    ///
+    /// RE-ASSERTED EVERY FEW SECONDS, NOT SET ONCE. The game resets these on a mission starting,
+    /// a cutscene, a load, an area transition, and a few other things nothing gets told about.
+    /// A suppression that quietly lapses looks exactly like a mod that never worked.
     /// </summary>
     internal static class AmbientCops
     {
-        private const int ReassertMs = 4000;
+        private const int ReassertMs = 3000;
+
+        /// <summary>
+        /// The dispatch services that send POLICE, by the game's own numbering.
+        ///
+        /// 1 police car, 2 police helicopter, 4 SWAT, 6 police bikes, 7 vehicle request,
+        /// 8 road block, 9 and 10 the waiting/cruising units, 12 SWAT helicopter, 13 police
+        /// boat, 14 army.
+        ///
+        /// NOT 3 (fire) and NOT 5 (ambulance). Those are emergency services rather than law
+        /// enforcement, nothing in this mod replaces them, and switching them off would mean no
+        /// fire engine ever attends anything -- a bug in a police mod that nobody would ever
+        /// connect back to it. 11 (gangs) and 15 (biker backup) are left for the same reason.
+        /// </summary>
+        private static readonly int[] PoliceServices = { 1, 2, 4, 6, 7, 8, 9, 10, 12, 13, 14 };
+
+        /// <summary>
+        /// The two the severity of the crime is allowed to switch back on.
+        ///
+        /// Everything else stays off permanently while the mod owns dispatch. These two come
+        /// back for a homicide or an officer down, because a helicopter and SWAT are things
+        /// this mod does not model and would otherwise simply never happen -- and at that level
+        /// they should.
+        /// </summary>
+        private const int Helicopter = 2;
+        private const int Swat = 4;
+        private const int SwatHelicopter = 12;
 
         private static int _lastPush;
         private static bool _suppressing;
 
-        /// <summary>Whether the vanilla generator is currently held off.</summary>
+        private static bool _allowAir;
+        private static bool _allowSwat;
+
+        /// <summary>Whether the engine's police are currently held off.</summary>
         public static bool Suppressed => _suppressing;
 
+        /// <summary>What the current incident justifies. Set by Manhunt, read on the next push.</summary>
+        public static void Allow(bool air, bool swat)
+        {
+            if (air == _allowAir && swat == _allowSwat) return;
+
+            _allowAir = air;
+            _allowSwat = swat;
+
+            // Pushed immediately rather than on the next beat. This changes when a crime
+            // escalates, and waiting three seconds to put a helicopter up after somebody shoots
+            // an officer is three seconds of nothing happening at the exact moment it should.
+            _lastPush = 0;
+        }
+
         /// <summary>
-        /// Holds the generator off, and keeps holding it.
+        /// Holds the engine's police off, and keeps holding them.
         ///
-        /// Call every tick. It rate-limits itself, so the cost is a comparison in the frames
-        /// between pushes.
+        /// Call every tick. It rate-limits itself, so the cost between pushes is a comparison.
         /// </summary>
-        public static void Hold()
+        public static void Hold(bool ownDispatch)
         {
             _suppressing = true;
 
@@ -52,21 +97,24 @@ namespace Precinct88.Streets
             if (now - _lastPush < ReassertMs) return;
             _lastPush = now;
 
-            Push(false);
+            Push(false, ownDispatch);
         }
 
-        /// <summary>Gives it back. For the mod being switched off, and for teardown.</summary>
+        /// <summary>Gives them back. For the mod being switched off, and for teardown.</summary>
         public static void Release()
         {
             if (!_suppressing) return;
 
             _suppressing = false;
-            Push(true);
+            _allowAir = false;
+            _allowSwat = false;
 
-            Log.Info("Ambient police generation handed back to the game.");
+            Push(true, true);
+
+            Log.Info("The game's own police handed back.");
         }
 
-        private static void Push(bool allow)
+        private static void Push(bool allow, bool ownDispatch)
         {
             try
             {
@@ -81,8 +129,34 @@ namespace Precinct88.Streets
             }
             catch (Exception ex)
             {
-                Log.Debug("Could not " + (allow ? "restore" : "suppress") +
-                          " ambient police: " + ex.Message);
+                Log.Debug("Could not set ambient police: " + ex.Message);
+            }
+
+            if (!ownDispatch && !allow) return;
+
+            try
+            {
+                foreach (var service in PoliceServices)
+                {
+                    var on = allow;
+
+                    if (!allow)
+                    {
+                        if (service == Helicopter) on = _allowAir;
+                        else if (service == Swat || service == SwatHelicopter) on = _allowSwat;
+                    }
+
+                    Function.Call(Hash.ENABLE_DISPATCH_SERVICE, service, on);
+                }
+
+                // AND THE ONE THAT IS NOT A SERVICE. Even with every service off the engine will
+                // still decide the player warrants police attention through its own cop-request
+                // path; this is the switch for that, and without it a few still arrive.
+                Function.Call(Hash.SET_DISPATCH_COPS_FOR_PLAYER, Game.Player.Handle, allow);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Could not set dispatch: " + ex.Message);
             }
         }
     }

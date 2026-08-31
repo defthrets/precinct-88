@@ -37,6 +37,7 @@ namespace Precinct88
         private readonly Booking _booking;
         private readonly SettingsScreen _screen;
         private readonly KnownStrip _strip;
+        private readonly Spotlight _beam;
 
         private bool _parked;
         private bool _standDown;
@@ -75,6 +76,7 @@ namespace Precinct88
                 // and it registers a handler whenever it gets round to it.
                 _screen = new SettingsScreen(_cfg, _fleet, _hunt, () => Dispatch.Seizer != null);
                 _strip = new KnownStrip(_cfg, _hunt);
+                _beam = new Spotlight(_cfg, _fleet);
 
                 // The one thing in this mod that outlives a session.
                 if (_cfg.CriminalProfile) _hunt.Record.Load();
@@ -336,11 +338,18 @@ namespace Precinct88
                 // The vanilla generator, held off every tick because the game keeps switching
                 // it back on. See AmbientCops -- this is a lapse that looks exactly like a mod
                 // that never worked.
-                if (_cfg.PatrolEnabled && _cfg.SuppressVanillaPatrols) AmbientCops.Hold();
+                if (_cfg.PatrolEnabled && _cfg.SuppressVanillaPatrols)
+                {
+                    AmbientCops.Hold(_cfg.OwnDispatch);
+                }
 
                 // Drawn after the systems have run, so it shows this frame's answer rather
                 // than last frame's. Under the panel, which draws in the finally below.
                 if (_strip != null) _strip.Draw();
+
+                // EVERY FRAME, and that is the point of it being here rather than on a tick.
+                // The fleet ticks at 750ms and a light drawn at that rate is a strobe.
+                if (_beam != null) _beam.Draw();
             }
             catch (Exception ex)
             {

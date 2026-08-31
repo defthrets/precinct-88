@@ -37,12 +37,28 @@ namespace Precinct88.Streets
         /// <summary>Which station answers for it. Matched by name against Stations.</summary>
         public readonly string Station;
 
-        public District(string name, string station, float density, float attention, params string[] zones)
+        /// <summary>
+        /// How much of the patrolling here is down the back of things, 0 to 1.
+        ///
+        /// A THIRD NUMBER, and it earns its place for the same reason Density and Attention are
+        /// separate: it describes something neither of the others can. Rockford Hills is low
+        /// density and high attention and has almost no alleys worth driving; Davis is high
+        /// density, low attention, and is mostly back lanes. Folding this into either of the
+        /// others would make one of those two districts wrong.
+        ///
+        /// Multiplied by how dark it is at the point of use, so this is the NIGHT figure and
+        /// daytime alley patrolling is a fraction of it.
+        /// </summary>
+        public readonly float Alleys;
+
+        public District(string name, string station, float density, float attention,
+                        float alleys, params string[] zones)
         {
             Name = name;
             Station = station;
             Density = density;
             Attention = attention;
+            Alleys = alleys;
             Zones = zones;
         }
     }
@@ -62,40 +78,59 @@ namespace Precinct88.Streets
     {
         /// <summary>Nowhere in particular. Nothing patrols here and nothing responds quickly.</summary>
         public static readonly District Unpoliced =
-            new District("Unpoliced", "Mission Row", 0f, 0.15f);
+            new District("Unpoliced", "Mission Row", 0f, 0.15f, 0f);
 
         private static readonly District[] All =
         {
-            // Downtown. The busiest ground in the game and the station everybody knows.
-            new District("Mission Row", "Mission Row", 1.00f, 0.55f,
+            // THE THIRD NUMBER IS THE ALLEY FIGURE, and every district has a considered one.
+            //
+            // A caveat that matters for the last two: out of the city, "not GPS-routable" stops
+            // meaning alley and starts meaning dirt track, fire road and farm access. That is
+            // still the right behaviour -- a sheriff on a back road is what those districts
+            // have instead of a cruiser down a service lane -- but it is a different thing to
+            // watch, and their figures are set for a back road rather than for an alley.
+
+            // Downtown. The busiest ground in the game and the station everybody knows, and
+            // Skid Row and the Textile City service lanes are some of the densest alley
+            // network in the map.
+            new District("Mission Row", "Mission Row", 1.00f, 0.55f, 0.55f,
                          "DOWNT", "LEGSQU", "TEXTI", "SKID", "PBOX", "STRAW", "MISSION"),
 
             // South. Cars everywhere, and none of them care -- which is the whole point of
-            // running a corner down here rather than in Rockford.
-            new District("Davis", "Davis", 0.95f, 0.30f,
+            // running a corner down here rather than in Rockford. Almost all of Davis and
+            // Rancho is back lanes behind low housing, which is exactly what this is for.
+            new District("Davis", "Davis", 0.95f, 0.30f, 0.70f,
                          "DAVIS", "RANCHO", "CHAMH", "CYPRE", "SLAB"),
 
-            // East industrial. Quiet, and quiet in a way that means nobody is coming.
-            new District("La Mesa", "La Mesa", 0.55f, 0.35f,
+            // East industrial. Quiet, and quiet in a way that means nobody is coming -- and
+            // nothing in the game has more service road per square metre than Cypress Flats
+            // and El Burro.
+            new District("La Mesa", "La Mesa", 0.55f, 0.35f, 0.75f,
                          "LMESA", "EBURO", "MURRI", "ELYSIAN", "TERMINA", "PROCOB"),
 
-            // The beach. Heavy foot traffic, light policing, and a lot of it on foot.
-            new District("Vespucci", "Vespucci", 0.70f, 0.40f,
+            // The beach. Heavy foot traffic, light policing, and a lot of it on foot. Little
+            // Seoul and the Vespucci strip have real rear access behind the shopfronts; the
+            // canals and the sand have none, which is what pulls the figure down.
+            new District("Vespucci", "Vespucci", 0.70f, 0.40f, 0.40f,
                          "VESP", "VCANA", "DELPE", "KOREAT", "LOSPUER", "PBLUFF"),
 
             // Money. You will not see many, and the one you see has already noticed you.
-            new District("Rockford Hills", "Rockford Hills", 0.35f, 0.85f,
+            // Deliberately the lowest: these are driveways and private roads, not alleys, and
+            // a squad car creeping down one is a different mod.
+            new District("Rockford Hills", "Rockford Hills", 0.35f, 0.85f, 0.15f,
                          "ROCKF", "BURTON", "MORN", "RICHM", "GOLF", "BHAMCA", "BANHAMC"),
 
-            // Vinewood. Tourists, cameras, and a force that behaves accordingly.
-            new District("Vinewood", "Vinewood", 0.65f, 0.60f,
+            // Vinewood. Tourists, cameras, and a force that behaves accordingly. The Blvd
+            // back lots and the studio service roads are the alleys here.
+            new District("Vinewood", "Vinewood", 0.65f, 0.60f, 0.40f,
                          "VINE", "WVINE", "DTVINE", "HAWICK", "ALTA", "MOVIE", "RGLEN", "TONGVAH"),
 
-            // North of the city. Sparse and slow, and everybody local knows it.
-            new District("Sandy Shores", "Sandy Shores", 0.30f, 0.35f,
+            // North of the city. Sparse and slow, and everybody local knows it. Off the
+            // tarmac this is dirt track rather than alley -- see the note at the top.
+            new District("Sandy Shores", "Sandy Shores", 0.30f, 0.35f, 0.30f,
                          "SANDY", "GRAPES", "ALAMO", "HARMO", "CCREAK", "LAGO", "MTGORDO"),
 
-            new District("Paleto Bay", "Paleto Bay", 0.25f, 0.40f,
+            new District("Paleto Bay", "Paleto Bay", 0.25f, 0.40f, 0.30f,
                          "PALETO", "PALFOR", "PALCOV", "MTCHIL", "CHIL", "BRADP", "BRADT"),
         };
 

@@ -177,12 +177,21 @@ namespace Precinct88.UI
                   note: "Before the district weighting. Three is a city");
             Tick("Suppress vanilla police", "Patrol", "SuppressVanillaPatrols",
                  () => _cfg.SuppressVanillaPatrols, v => _cfg.SuppressVanillaPatrols = v,
-                 "The setting the whole mod is about -- see the ini");
+                 "Stops the game creating cars for ambient density");
+            Tick("Own dispatch only", "Patrol", "OwnDispatch",
+                 () => _cfg.OwnDispatch, v => _cfg.OwnDispatch = v,
+                 "No car is ever created because of your stars. THE setting");
             Slide("Minutes on a beat", "Patrol", "BeatMinutes",
                   () => _cfg.BeatMinutes, v => _cfg.BeatMinutes = v, 1f, 60f, 1f, "0", "m");
             Tick("Come from a station", "Patrol", "FromStations",
                  () => _cfg.FromStations, v => _cfg.FromStations = v,
                  "Skipped automatically when the nearest one is too far");
+            Slide("Back-alley patrol", "Patrol", "AlleyPatrol",
+                  () => _cfg.AlleyPatrol, v => _cfg.AlleyPatrol = v, 0f, 2f, 0.1f, "0.0", "x",
+                  note: "Over each district's own figure. Heavier after dark");
+            Tick("Spotlights after dark", "Patrol", "Spotlights",
+                 () => _cfg.Spotlights, v => _cfg.Spotlights = v,
+                 "Out of the driver's window, swung down whatever they pass");
 
             Head("Wanted");
             Tick("Wanted rework", "Wanted", "Enabled",
@@ -594,9 +603,10 @@ namespace Precinct88.UI
 
             var district = Districts.Here();
 
-            Screen.Text(district.Name, left, y, NoteScale, Ink);
-            Screen.Text("density " + district.Density.ToString("0.00", CultureInfo.InvariantCulture) +
-                        "   attention " + district.Attention.ToString("0.00", CultureInfo.InvariantCulture),
+            Screen.Text(district.Name + (Alleys.IsDark() ? "  (night)" : ""), left, y, NoteScale, Ink);
+            Screen.Text("den " + district.Density.ToString("0.00", CultureInfo.InvariantCulture) +
+                        "  att " + district.Attention.ToString("0.00", CultureInfo.InvariantCulture) +
+                        "  alley " + district.Alleys.ToString("0.00", CultureInfo.InvariantCulture),
                         right, y, NoteScale, Faint, rightAligned: true);
 
             y += 0.021f;
@@ -604,11 +614,29 @@ namespace Precinct88.UI
             var units = _fleet == null ? 0 : _fleet.Count;
             var onCalls = _fleet == null ? 0 : _fleet.OnCalls();
 
-            Screen.Text("units out " + units + "   on a call " + onCalls, left, y, NoteScale, Dim);
+            var backs = 0;
 
-            Screen.Text(AmbientCops.Suppressed ? "vanilla police suppressed" : "vanilla police ON",
-                        right, y, NoteScale, AmbientCops.Suppressed ? Faint : Warn,
-                        rightAligned: true);
+            if (_fleet != null)
+            {
+                foreach (var u in _fleet.Units)
+                {
+                    if (u.OnABackStreet) backs++;
+                }
+            }
+
+            var surge = _fleet == null ? 0 : _fleet.Surge;
+
+            Screen.Text("units out " + units + "   on a call " + onCalls +
+                        "   back streets " + backs +
+                        (surge > 0 ? "   surge +" + surge : ""),
+                        left, y, NoteScale, surge > 0 ? Warn : Dim);
+
+            var mine = AmbientCops.Suppressed && _cfg.OwnDispatch;
+
+            Screen.Text(mine ? "dispatch is ours"
+                        : AmbientCops.Suppressed ? "ambient off, GAME DISPATCH ON"
+                        : "game police ON",
+                        right, y, NoteScale, mine ? Faint : Warn, rightAligned: true);
 
             y += 0.021f;
 

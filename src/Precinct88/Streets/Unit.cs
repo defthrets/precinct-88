@@ -81,6 +81,27 @@ namespace Precinct88.Streets
         /// <summary>What it was sent to, if anything. Null while it is just driving.</summary>
         public string CallReason;
 
+        /// <summary>
+        /// Where the spotlight is pointing, eased toward where it wants to point.
+        ///
+        /// Lives on the unit rather than in Spotlight because it has to survive between frames
+        /// and belongs to this car -- two units passing each other must not share one beam.
+        /// </summary>
+        public Vector3 Beam;
+
+        /// <summary>
+        /// How interested this particular crew is in the man on the pavement, 0 to 1.
+        ///
+        /// Rolled once when the unit goes out and never changed. It is what stops every car in
+        /// the city behaving identically: some of them swing the light onto you as they pass
+        /// and some of them do not, and it is the same two officers each time, which is what
+        /// makes them read as people rather than as a system.
+        /// </summary>
+        public float Interest;
+
+        /// <summary>Whether this leg is down the back of things rather than on a road.</summary>
+        public bool OnABackStreet;
+
         private Vector3 _wasAt;
         private int _lookedAt;
         private int _nudges;

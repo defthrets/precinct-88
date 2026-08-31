@@ -39,6 +39,9 @@ namespace Precinct88.Streets
         private const int GapMinMs = 24000;
         private const int GapMaxMs = 70000;
 
+        /// <summary>And how long during a response, when the beat rhythm is the wrong one.</summary>
+        private const int SurgeGapMs = 3500;
+
         /// <summary>How long a unit sits somewhere watching a street.</summary>
         private const int SitMinMs = 16000;
         private const int SitMaxMs = 46000;
@@ -67,6 +70,23 @@ namespace Precinct88.Streets
         /// is not atmosphere, it is two officers walking into a firefight they were not sent to.
         /// </summary>
         public Func<bool> Busy;
+
+        /// <summary>
+        /// Extra units wanted right now, on top of the district's ordinary beat.
+        ///
+        /// WITH THE ENGINE'S DISPATCH SWITCHED OFF, THIS IS THE ONLY WAY ANYBODY COMES. That is
+        /// the trade the mod makes: the game will no longer conjure a car behind you, so when a
+        /// serious crime happens this mod has to put the cars out itself -- and they still have
+        /// to drive to you from somewhere, which is the whole point.
+        ///
+        /// Set by Manhunt from the star count. Zero when nothing is happening.
+        /// </summary>
+        public int Surge;
+
+        /// <summary>Where a surged unit heads the moment it exists.</summary>
+        public Vector3 SurgeTo;
+
+        public bool Surging => Surge > 0;
 
         public Fleet(Settings cfg)
         {
@@ -129,7 +149,13 @@ namespace Precinct88.Streets
             // Always at least one where anybody polices at all. Rounding a 0.25 density down
             // to zero means Paleto Bay has no police, which is a different claim than "not
             // many".
-            return n < 1 ? 1 : n;
+            if (n < 1) n = 1;
+
+            // The surge sits ON TOP of the beat rather than replacing it, so a chase does not
+            // empty the surrounding streets of the ordinary patrol -- which would be the most
+            // obvious possible tell that the police in this game are a budget rather than a
+            // force.
+            return n + Surge;
         }
 
         /// <summary>Lets go of anything dead, finished, or far enough away to stop mattering.</summary>
@@ -218,9 +244,27 @@ namespace Precinct88.Streets
             next = Vector3.Zero;
 
             var from = Cops.Alive(unit.Car) ? unit.Car.Position : playerAt;
-            Vector3 fallback = Vector3.Zero;
-            var haveFallback = false;
 
+            // ALLEY OR ROAD, decided here and nowhere else.
+            //
+            // The district says how much of its patrolling is down the back of things; the
+            // clock scales it, because a service road behind a row of shops is somewhere a
+            // patrol car goes at two in the morning and not at two in the afternoon. A floor
+            // under it keeps a bit of it happening in daylight, so the behaviour is not a
+            // thing players only ever hear about.
+            var beat = unit.Beat ?? Districts.At(from);
+
+            var bias = beat.Alleys * (0.25f + 0.75f * Alleys.Night()) * _cfg.AlleyPatrol;
+            var wantAlley = _rng.NextDouble() < bias;
+
+            if (Alleys.Find(from, LegMin, LegMax, wantAlley, unit.Beat, _rng, out next))
+            {
+                unit.OnABackStreet = wantAlley;
+                return true;
+            }
+
+            // Nothing on the node network. Fall back to the old road-node search rather than
+            // leaving the unit parked -- a car still driving is never the failure.
             for (var attempt = 0; attempt < 3; attempt++)
             {
                 var angle = _rng.NextDouble() * Math.PI * 2d;
@@ -233,26 +277,24 @@ namespace Precinct88.Streets
                 float heading;
                 if (!Stations.RoadBy(guess, out road, out heading)) continue;
 
-                if (!haveFallback) { fallback = road; haveFallback = true; }
-
-                if (unit.Beat == null || Districts.At(road) == unit.Beat)
-                {
-                    next = road;
-                    return true;
-                }
+                next = road;
+                unit.OnABackStreet = false;
+                return true;
             }
 
-            if (!haveFallback) return false;
-
-            next = fallback;
-            return true;
+            return false;
         }
 
         // ---- putting one out ---------------------------------------------------
 
         private void TryPutOneOut(Vector3 playerAt, int now)
         {
-            _nextSpawn = now + GapMinMs + _rng.Next(GapMaxMs - GapMinMs);
+            // A SURGE CANNOT WAIT SEVENTY SECONDS FOR THE NEXT CAR. The ordinary gap is the
+            // rhythm of a beat, which is exactly wrong for a response -- with the engine's
+            // dispatch off, a slow gap here is a five-star manhunt where nobody turns up.
+            _nextSpawn = Surging
+                ? now + SurgeGapMs + _rng.Next(SurgeGapMs)
+                : now + GapMinMs + _rng.Next(GapMaxMs - GapMinMs);
 
             var beat = Districts.At(playerAt);
             if (beat.Density <= 0f) return;
@@ -265,9 +307,20 @@ namespace Precinct88.Streets
             if (unit == null) return;
 
             _out.Add(unit);
+            unit.Beat = beat;
+
+            if (Surging && SurgeTo != Vector3.Zero)
+            {
+                // Straight to the call. It was not on a beat and never pretended to be -- this
+                // is a unit answering something, which is what a response is.
+                unit.RespondTo(SurgeTo, "a call");
+
+                Log.Debug("Unit out to a call (" + _out.Count + " on the road, surge " +
+                          Surge + ").");
+                return;
+            }
 
             Vector3 first;
-            unit.Beat = beat;
             unit.Roll(NextLeg(unit, playerAt, out first) ? first : playerAt,
                       _rng.Next(100) < StopChancePercent);
 
@@ -303,10 +356,16 @@ namespace Precinct88.Streets
                 }
             }
 
+            // Closer during a surge. Still out of sight, still on a real road, still has to
+            // drive -- but a responding unit starting two hundred metres out is a responding
+            // unit that arrives after the player has gone.
+            var near = Surging ? SpawnNear * 0.7f : SpawnNear;
+            var far = Surging ? SpawnFar * 0.7f : SpawnFar;
+
             for (var attempt = 0; attempt < 5; attempt++)
             {
                 var angle = _rng.NextDouble() * Math.PI * 2d;
-                var dist = SpawnNear + (float)_rng.NextDouble() * (SpawnFar - SpawnNear);
+                var dist = near + (float)_rng.NextDouble() * (far - near);
 
                 var guess = playerAt + new Vector3((float)Math.Cos(angle) * dist,
                                                    (float)Math.Sin(angle) * dist, 0f);
@@ -356,7 +415,11 @@ namespace Precinct88.Streets
                 {
                     Car = car,
                     Beat = beat,
-                    OffDutyAt = now + (int)(_cfg.BeatMinutes * 60000f)
+                    OffDutyAt = now + (int)(_cfg.BeatMinutes * 60000f),
+
+                    // Rolled once and kept. Two officers who look at everybody, or two who
+                    // look at nobody, for the whole of their round.
+                    Interest = (float)_rng.NextDouble(),
                 };
 
                 // Two of them. One officer in a squad car is a mod that could not be bothered,
