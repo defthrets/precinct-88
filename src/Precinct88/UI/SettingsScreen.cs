@@ -235,7 +235,15 @@ namespace Precinct88.UI
                  () => _cfg.StopForWeapons, v => _cfg.StopForWeapons = v,
                  "Never a dice roll -- the one rule you can rely on");
             Tick("Traffic stops", "Contact", "TrafficStops",
-                 () => _cfg.TrafficStops, v => _cfg.TrafficStops = v);
+                 () => _cfg.TrafficStops, v => _cfg.TrafficStops = v,
+                 "Thirteen violations, four of them the game's own bookkeeping");
+            Tick("Enforce on cars", "Contact", "EnforceCars",
+                 () => _cfg.EnforceCars, v => _cfg.EnforceCars = v);
+            Tick("Enforce on motorcycles", "Contact", "EnforceBikes",
+                 () => _cfg.EnforceBikes, v => _cfg.EnforceBikes = v);
+            Tick("Enforce on bicycles", "Contact", "EnforceBicycles",
+                 () => _cfg.EnforceBicycles, v => _cfg.EnforceBicycles = v,
+                 "Being pulled over on a BMX is funny exactly once");
             Slide("Notice range", "Contact", "NoticeRange",
                   () => _cfg.NoticeRange, v => _cfg.NoticeRange = v, 5f, 120f, 1f, "0", "m");
             Slide("Between stops", "Contact", "StopCooldownSeconds",

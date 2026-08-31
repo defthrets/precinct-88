@@ -193,6 +193,19 @@ namespace Precinct88.Core
         /// <summary>Being pulled over for how you are driving, or for what you are driving.</summary>
         public bool TrafficStops = true;
 
+        /// <summary>Which kinds of vehicle the traffic laws are enforced on at all.</summary>
+        public bool EnforceCars = true;
+        public bool EnforceBikes = true;
+
+        /// <summary>
+        /// Bicycles. Off by default, and Pull Me Over defaults it off too.
+        ///
+        /// Every rule here applies to a pushbike -- you can speed on one, ride it on the
+        /// pavement, and go the wrong way up a street -- and being pulled over on a BMX is
+        /// funny exactly once.
+        /// </summary>
+        public bool EnforceBicycles = false;
+
         /// <summary>How far an officer notices something worth stopping you for.</summary>
         public float NoticeRange = 30f;
 
@@ -284,6 +297,9 @@ namespace Precinct88.Core
                 s.ContactEnabled = ini.GetBool("Contact", "Enabled", s.ContactEnabled);
                 s.StopForWeapons = ini.GetBool("Contact", "StopForWeapons", s.StopForWeapons);
                 s.TrafficStops = ini.GetBool("Contact", "TrafficStops", s.TrafficStops);
+                s.EnforceCars = ini.GetBool("Contact", "EnforceCars", s.EnforceCars);
+                s.EnforceBikes = ini.GetBool("Contact", "EnforceBikes", s.EnforceBikes);
+                s.EnforceBicycles = ini.GetBool("Contact", "EnforceBicycles", s.EnforceBicycles);
                 s.NoticeRange = Clamp(ini.GetFloat("Contact", "NoticeRange", s.NoticeRange), 5f, 120f);
                 s.StopCooldownSeconds = Clamp(ini.GetFloat("Contact", "StopCooldownSeconds",
                                                            s.StopCooldownSeconds), 5f, 600f);

@@ -33,6 +33,7 @@ namespace Precinct88
         private readonly Witness _witness;
         private readonly Stop _stop;
         private readonly Watch _watch;
+        private readonly Violations _violations;
         private readonly Surrender _surrender;
         private readonly Booking _booking;
         private readonly SettingsScreen _screen;
@@ -67,7 +68,8 @@ namespace Precinct88
                 _hunt = new Manhunt(_cfg, _fleet);
                 _witness = new Witness(_cfg, _hunt);
                 _stop = new Stop(_cfg, _hunt);
-                _watch = new Watch(_cfg, _fleet, _stop);
+                _violations = new Violations(_cfg);
+                _watch = new Watch(_cfg, _fleet, _stop, _violations);
                 _surrender = new Surrender(_cfg, _hunt);
                 _booking = new Booking(_cfg, _hunt, _witness);
 
@@ -341,10 +343,15 @@ namespace Precinct88
                 // 5. The stop currently running, before anything decides to start another one.
                 _stop.Update();
 
-                // 6. Whether to start one.
+                // 6. HOW YOU ARE DRIVING, before anything decides to stop you for it. The
+                //    detector runs continuously and Watch reads the result, so a violation is
+                //    noticed at the moment it happens rather than at the moment somebody looks.
+                _violations.Update();
+
+                // 7. Whether to start a stop.
                 _watch.Update();
 
-                // 7. The beat. LAST, because by now everything that could have claimed a unit
+                // 8. The beat. LAST, because by now everything that could have claimed a unit
                 //    has claimed it, and Fleet will not touch a unit in Duty.Contact.
                 _fleet.Update();
 

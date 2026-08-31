@@ -29,9 +29,6 @@ namespace Precinct88.Contact
     {
         private const int TickMs = 900;
 
-        /// <summary>Over this, in metres a second, in front of an officer.</summary>
-        private const float RecklessSpeed = 33f;
-
         /// <summary>How long the player has to be stood still for it to look like loitering.</summary>
         private const int LoiterMs = 25000;
 
@@ -41,6 +38,7 @@ namespace Precinct88.Contact
         private readonly Settings _cfg;
         private readonly Fleet _fleet;
         private readonly Stop _stop;
+        private readonly Violations _violations;
         private readonly Random _rng = new Random();
 
         private int _lastTick;
@@ -57,11 +55,12 @@ namespace Precinct88.Contact
         /// </summary>
         public Func<bool> Occupied;
 
-        public Watch(Settings cfg, Fleet fleet, Stop stop)
+        public Watch(Settings cfg, Fleet fleet, Stop stop, Violations violations)
         {
             _cfg = cfg;
             _fleet = fleet;
             _stop = stop;
+            _violations = violations;
         }
 
         public void Update()
@@ -139,7 +138,33 @@ namespace Precinct88.Contact
                 if (!Cops.Alive(car)) return null;
                 if (car.Driver == null || car.Driver.Handle != me.Handle) return null;
 
-                if (car.Speed > RecklessSpeed) return Why.Driving;
+                // WHAT HE ACTUALLY SAW, rather than a speed threshold. Violations has been
+                // watching continuously and knows which of fourteen things are true right now;
+                // Take() also marks them told, so the same offence does not start four stops
+                // in a row on one journey.
+                if (_violations != null)
+                {
+                    var got = _violations.Take();
+
+                    if (got.Count > 0)
+                    {
+                        var worst = Violations.Worst(got);
+
+                        if (worst.HasValue)
+                        {
+                            // Not everything is worth stopping somebody for everywhere. A
+                            // wheelie in Davis is Tuesday; in Rockford Hills it is a
+                            // conversation. Weight 3 offences are stopped for anywhere.
+                            var w = Violations.Weight(worst.Value);
+
+                            if (w >= 3 || Roll(0.35f + attention * 0.65f))
+                            {
+                                _stop.Because = got;
+                                return Why.Driving;
+                            }
+                        }
+                    }
+                }
 
                 // The plate. Rolled, because running every plate that goes past is not a
                 // thing that happens -- and because being stopped in a stolen car every single

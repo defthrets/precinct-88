@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using GTA;
 using GTA.Math;
 using GTA.Native;
@@ -97,6 +98,16 @@ namespace Precinct88.Contact
         private Ped _officer;
         private Beat _at = Beat.None;
         private Why _why;
+
+        /// <summary>
+        /// The violations this stop is actually about, set by Watch before it begins.
+        ///
+        /// A LIST, because you have very often committed several at once -- Pull Me Over makes
+        /// the same point, and it is true the moment anybody drives quickly on a pavement. The
+        /// officer leads with the worst of them and mentions how many others there were, which
+        /// is what a real one does.
+        /// </summary>
+        public List<Violation> Because = new List<Violation>();
 
         private int _startedAt;
         private int _phaseAt;
@@ -390,19 +401,49 @@ namespace Precinct88.Contact
             if (now - _phaseAt > PatienceMs) End("he had nothing to hold you on", true);
         }
 
-        private static string Said(Why why)
+        private string Said(Why why)
         {
             switch (why)
             {
                 case Why.Weapon:
                     return "Put it down. Hands where I can see them.";
+
                 case Why.Driving:
-                    return "You know how fast you were going?";
+                    return Ticket();
+
                 case Why.Plate:
                     return "This your vehicle? Step out.";
+
                 default:
                     return "Hands where I can see them. What are you doing round here?";
             }
+        }
+
+        /// <summary>
+        /// What he opens with, which is what he actually saw.
+        ///
+        /// "You know how fast you were going" was the old line for every traffic stop, and it
+        /// was wrong for eleven of the fourteen things that can now start one -- being asked
+        /// about your speed after riding a wheelie down a pavement is a mod that has not been
+        /// paying attention. He names the worst of it and counts the rest.
+        /// </summary>
+        private string Ticket()
+        {
+            var worst = Violations.Worst(Because);
+
+            if (!worst.HasValue) return "Do you know why I stopped you?";
+
+            var what = Violations.Called(worst.Value);
+
+            if (Because.Count > 1)
+            {
+                return "I have you for " + what + ", and " + (Because.Count - 1) +
+                       (Because.Count == 2 ? " other thing." : " other things.");
+            }
+
+            return worst.Value == Violation.Speeding
+                ? "You know how fast you were going?"
+                : "I stopped you for " + what + ".";
         }
 
         private void Searching(Ped me, int now)
@@ -629,6 +670,7 @@ namespace Precinct88.Contact
             _unit = null;
             _officer = null;
             _handsUp = false;
+            Because = new List<Violation>();
 
             _nextAllowed = Game.GameTime + (int)(_cfg.StopCooldownSeconds * 1000f);
 
