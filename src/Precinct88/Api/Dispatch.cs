@@ -88,7 +88,16 @@ namespace Precinct88.Api
                 Offence what;
                 var known = Crime.Parse(offence, out what);
 
-                Chase.Report(what, new Vector3(x, y, z));
+                // DESCRIBED, because a mod reporting a crime is reporting one it watched
+                // happen. Hoodrich's busts are called in by an undercover officer stood in
+                // front of you; defaulting to "nobody could describe him" would quietly make
+                // every bust in that mod unsolvable.
+                //
+                // Kept out of the signature deliberately -- the caller binds Report by its
+                // exact parameter types, and adding one would be an API break for a default
+                // that is right in every case anybody has yet.
+                Chase.Report(what, new Vector3(x, y, z),
+                             Known.Face | Known.Clothes | Known.Vehicle);
 
                 if (!known) Log.Warn("Bridge: unknown offence '" + offence + "'; treated as " + what + ".");
 

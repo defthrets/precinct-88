@@ -485,7 +485,12 @@ namespace Precinct88.Contact
 
             // Reported AFTER the scene is torn down, so the officer is free to respond to it
             // rather than still stood in a walk-to-entity task.
-            _hunt.Report(worse, me.Position);
+            //
+            // WITH A FULL DESCRIPTION, and there is no argument about it: an officer was stood
+            // close enough to talk to you. He has your face unless it is covered, what you are
+            // wearing, and what you are in. Running from a stop is the one crime in the mod
+            // that can never be anonymous.
+            _hunt.Report(worse, me.Position, Known.Face | Known.Clothes | Known.Vehicle);
         }
 
         private bool WalkedAway(Ped me)

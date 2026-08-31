@@ -203,6 +203,21 @@ namespace Precinct88.UI
             Slide("Star ceiling", "Wanted", "MaxStars",
                   () => _cfg.MaxStars, v => _cfg.MaxStars = (int)v, 1f, 5f, 1f, "0",
                   note: "A lid ON TOP of the per-crime ceilings, not instead of them");
+            Tick("Show what they know", "Wanted", "ShowKnownStrip",
+                 () => _cfg.ShowKnownStrip, v => _cfg.ShowKnownStrip = v,
+                 "Tags under the stars. Grey means they hold it and it is now wrong");
+            Slide("Strip height", "Wanted", "KnownStripY",
+                  () => _cfg.KnownStripY, v => _cfg.KnownStripY = v, 0f, 0.9f, 0.005f, "0.000",
+                  note: "Nudge if another mod has moved your HUD");
+            Tick("Cameras watch", "Wanted", "CamerasWatch",
+                 () => _cfg.CamerasWatch, v => _cfg.CamerasWatch = v,
+                 "The counter to doing it where nobody is standing");
+            Tick("Criminal profile", "Wanted", "CriminalProfile",
+                 () => _cfg.CriminalProfile, v => _cfg.CriminalProfile = v,
+                 "How violently you work, remembered between incidents");
+            Tick("Scenes stay warm", "Wanted", "SceneStaysWarm",
+                 () => _cfg.SceneStaysWarm, v => _cfg.SceneStaysWarm = v,
+                 "Coming back to something serious can put it back on you");
 
             Head("Contact");
             Tick("Stops and searches", "Contact", "Enabled",
@@ -506,7 +521,7 @@ namespace Precinct88.UI
 
                 var bodyH = rows * RowH;
                 var headH = 0.055f;
-                var footH = 0.092f;
+                var footH = 0.113f;
 
                 var top = TopY;
 
@@ -604,7 +619,27 @@ namespace Precinct88.UI
                         right, y, NoteScale,
                         _bridged != null && _bridged() ? Good : Faint, rightAligned: true);
 
-            y += 0.023f;
+            y += 0.021f;
+
+            if (_cfg.CriminalProfile && _hunt != null && _hunt.Record != null)
+            {
+                var record = _hunt.Record;
+
+                Screen.Text("profile " + record.Word +
+                            " (" + record.Violence.ToString("0.00", CultureInfo.InvariantCulture) + ")",
+                            left, y, NoteScale,
+                            record.Notorious ? Warn : record.Hardened ? Warn : Dim);
+            }
+            else
+            {
+                Screen.Text("profile off", left, y, NoteScale, Faint);
+            }
+
+            Screen.Text(Radio.Masked(Game.Player.Character) ? "face covered" : "face uncovered",
+                        right, y, NoteScale,
+                        Radio.Masked(Game.Player.Character) ? Good : Faint, rightAligned: true);
+
+            y += 0.021f;
 
             Screen.Text("Arrows move and change   Enter toggles   Backspace closes",
                         PanelX, y, NoteScale, Faint, centred: true);
@@ -621,11 +656,36 @@ namespace Precinct88.UI
 
             var radius = _hunt.SearchRadius.ToString("0", CultureInfo.InvariantCulture);
 
-            var matches = _hunt.Description != null &&
-                          _hunt.Description.Matches(Game.Player.Character);
+            // NO DESCRIPTION AT ALL is a different situation to a stale one, and the panel is
+            // the one place that difference has to be legible -- from the street they look
+            // identical right up until an officer walks past you.
+            if (_hunt.Unidentified) return "searching " + radius + "m -- " + what + " -- NO DESCRIPTION";
+
+            var has = _hunt.Description == null ? Known.Nothing : _hunt.Description.Has;
+
+            var matching = _hunt.Description == null
+                ? Known.Nothing
+                : _hunt.Description.StillMatching(Game.Player.Character);
 
             return "searching " + radius + "m -- " + what +
-                   (matches ? "" : "  (description stale)");
+                   " -- has " + Short(has) +
+                   ", you match " + (matching == Known.Nothing ? "nothing" : Short(matching));
+        }
+
+        /// <summary>The flags as three-letter tags, so a whole description fits on one row.</summary>
+        private static string Short(Known k)
+        {
+            if (k == Known.Nothing) return "nothing";
+
+            var bits = new List<string>();
+
+            if ((k & Known.Face) != 0) bits.Add("FACE");
+            if ((k & Known.Clothes) != 0) bits.Add("FIT");
+            if ((k & Known.Vehicle) != 0) bits.Add("CAR");
+            if ((k & Known.Weapon) != 0) bits.Add("GUN");
+            if ((k & Known.Camera) != 0) bits.Add("CAM");
+
+            return string.Join("+", bits.ToArray());
         }
 
         private int FirstReal()

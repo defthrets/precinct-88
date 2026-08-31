@@ -123,13 +123,20 @@ namespace Precinct88.Core
     internal static class Build
     {
         /// <summary>
-        /// 0.1.0 -- the first build with all four systems in it.
+        /// 0.2.0 -- identification comes apart into pieces.
         ///
-        /// Ambient patrol on a beat, a wanted system that searches rather than knows, contact
-        /// that starts with a reason, and custody that ends somewhere other than a hospital
-        /// bill.
+        /// 0.1.0 was the first build with all four systems in it: ambient patrol on a beat, a
+        /// wanted system that searches rather than knows, contact that starts with a reason,
+        /// and custody that ends somewhere other than a hospital bill.
+        ///
+        /// 0.2.0 splits the single "do they know you" bit into separate things they can hold
+        /// and separately lose -- face, clothes, vehicle, weapon, camera. That one change is
+        /// what makes a crime nobody could describe a real state, gives the strip under the
+        /// stars something to say, and turns ditching a car into a partial escape rather than
+        /// nothing at all. Cameras, a criminal profile that outlives the session, and a crime
+        /// scene that stays warm all hang off it.
         /// </summary>
-        public const string Version = "0.1.0";
+        public const string Version = "0.2.0";
 
         public const string Name = "Precinct 88";
         public const string By = "spitmux";

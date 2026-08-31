@@ -75,6 +75,12 @@ namespace Precinct88.Response
         private readonly Radio _radio = new Radio();
         private readonly Random _rng = new Random();
 
+        /// <summary>How violently you work, remembered between incidents.</summary>
+        private readonly Profile _profile = new Profile();
+
+        /// <summary>Whether anybody has been hurt during THIS incident.</summary>
+        private bool _bloody;
+
         private int _lastTick;
         private int _lastRedirect;
 
@@ -90,6 +96,30 @@ namespace Precinct88.Response
         private int _pushedStars = -1;
         private bool _dispatchSet;
 
+        /// <summary>
+        /// Where the last incident happened, and for how long it is still a place with police
+        /// interest in it.
+        ///
+        /// A CRIME SCENE DOES NOT STOP EXISTING BECAUSE YOU GOT AWAY. In vanilla the meter runs
+        /// out and the street is instantly as innocent as it was that morning -- you can drive
+        /// straight back to the body you left and park. Here the location stays warm: come back
+        /// while it is, and somebody who is still standing there recognises the car, or the
+        /// officer taking statements looks up.
+        ///
+        /// Deliberately cheap and deliberately forgiving. It re-reports once, at reduced heat,
+        /// and then forgets -- a memory that re-armed itself would make the scene a permanent
+        /// no-go zone, which is a different and much more annoying mechanic.
+        /// </summary>
+        private Vector3 _sceneAt;
+        private Offence _sceneWhat;
+        private int _sceneCold;
+
+        /// <summary>How long a scene stays warm after you get away from it.</summary>
+        private const int SceneWarmMs = 240000;
+
+        /// <summary>How close you have to come back for it to matter.</summary>
+        private const float SceneRange = 55f;
+
         public Manhunt(Settings cfg, Fleet fleet)
         {
             _cfg = cfg;
@@ -102,6 +132,9 @@ namespace Precinct88.Response
         /// <summary>The description that is out, for anything that wants to show it.</summary>
         public Radio Description => _radio;
 
+        /// <summary>How violently you work, remembered between incidents.</summary>
+        public Profile Record => _profile;
+
         /// <summary>The worst thing on the current incident, or null when there is no incident.</summary>
         public Weight Worst => _worst;
 
@@ -113,6 +146,18 @@ namespace Precinct88.Response
 
         /// <summary>Whether anything at all is going on. The question most callers ask.</summary>
         public bool Running => State != Hunt.Clear;
+
+        /// <summary>
+        /// A crime is out and nobody could describe the man who did it.
+        ///
+        /// Police converge on a street with a location and nothing else. An officer walks past
+        /// you because as far as he has been told you are a member of the public -- which is
+        /// the state vanilla has no way to represent at all.
+        /// </summary>
+        public bool Unidentified => Running && _radio.Unidentified;
+
+        /// <summary>What they have on you. Empty when nothing is out.</summary>
+        public Known Known => Running ? _radio.Has : Response.Known.Nothing;
 
         /// <summary>Said when the ticker should carry a line. Set by Main.</summary>
         public Action<string> Say;
@@ -127,14 +172,22 @@ namespace Precinct88.Response
         /// actually hold. A crime that adds stars by calling the game's own native behind this
         /// class's back is a crime with no ceiling at all.
         /// </summary>
-        public void Report(Offence what, Vector3 where)
+        public void Report(Offence what, Vector3 where, Known got = Known.Nothing)
         {
             if (!_cfg.WantedEnabled) return;
             if (LawHold.Held) return;
 
             var weight = Crime.Of(what);
 
-            _heat += weight.Heat;
+            // THE PROFILE SCALES HEAT, NOT THE CEILING. A violent player reaches the top of an
+            // offence faster and holds it longer; he does not get a helicopter for a traffic
+            // stop, because the per-crime ceilings are the honest part of the system and
+            // nothing is allowed to lift them.
+            _heat += weight.Heat * (_cfg.CriminalProfile ? _profile.Multiplier : 1f);
+
+            if (_cfg.CriminalProfile) _profile.Saw(what);
+
+            if (what == Offence.Homicide || what == Offence.OfficerDown) _bloody = true;
 
             // The WORST thing on the incident sticks, and nothing downgrades it. Shooting
             // somebody and then getting reported for loitering does not turn a homicide back
@@ -149,9 +202,16 @@ namespace Precinct88.Response
 
             if (State == Hunt.Clear)
             {
-                // FIRST REPORT PUTS THE DESCRIPTION OUT FROM WHERE IT HAPPENED, not from where
-                // an officer happened to be looking. Somebody called this in.
-                _radio.Describe(me);
+                // FIRST REPORT PUTS OUT WHATEVER THE WITNESS ACTUALLY GOT, from where it
+                // happened rather than from where an officer happened to be looking.
+                //
+                // `got` is very often Known.Nothing, and that is the interesting case rather
+                // than a degenerate one: gunfire heard through a wall is a real report with a
+                // real location and no description at all. Police converge on the street and
+                // walk straight past the man who did it, because as far as anybody has told
+                // them he is a member of the public.
+                _radio.Note(me, got);
+                _radio.Seen(where);
 
                 _searchFrom = where;
                 _searchRadius = 45f;
@@ -168,19 +228,23 @@ namespace Precinct88.Response
             else
             {
                 // Already running. A fresh report re-centres the search on the new thing --
-                // it is newer information than whatever they had.
+                // it is newer information than whatever they had -- and ADDS whatever this
+                // witness got. A man they could not describe becomes a man they can the moment
+                // somebody sees him properly, without the incident restarting.
+                _radio.Note(me, got);
+
                 _searchFrom = where;
                 _searchRadius = Math.Min(_searchRadius, 60f);
             }
         }
 
         /// <summary>Convenience for the detectors: report wherever the player is.</summary>
-        public void Report(Offence what)
+        public void Report(Offence what, Known got = Known.Nothing)
         {
             try
             {
                 var me = Game.Player.Character;
-                Report(what, me == null || !me.Exists() ? Vector3.Zero : me.Position);
+                Report(what, me == null || !me.Exists() ? Vector3.Zero : me.Position, got);
             }
             catch
             {
@@ -192,6 +256,24 @@ namespace Precinct88.Response
         public void Clear(string why)
         {
             if (State == Hunt.Clear && _heat <= 0f) return;
+
+            // The scene stays warm even though the hunt is over. Not on an arrest -- they have
+            // you, so there is nothing left to come back to -- and not when the incident was
+            // never anything, or every traffic stop leaves a landmine on the road.
+            if (_cfg.SceneStaysWarm && _worst != null && _worst.Ceiling >= 3 &&
+                !why.StartsWith("arrest"))
+            {
+                _sceneAt = _searchFrom;
+                _sceneWhat = _worstWhat;
+                _sceneCold = Game.GameTime + SceneWarmMs;
+            }
+
+            // Got away without hurting anybody. Nelson's line about GTA VI is the design here
+            // almost word for word: commit a crime, move on before the police arrive, do not
+            // start shooting, and you are generally going to be fine.
+            if (_cfg.CriminalProfile && !_bloody && _worst != null) _profile.CleanGetaway();
+
+            _bloody = false;
 
             _heat = 0f;
             _worst = null;
@@ -212,8 +294,17 @@ namespace Precinct88.Response
 
             _pushedStars = 0;
 
+            // Attention back on before anything else. Leaving the player permanently invisible
+            // to the police because an incident ended while he happened to be unidentified is
+            // the worst thing this file could do.
+            LawHold.Ignore(false);
+
             LawHold.Uncap();
             RestoreDispatch();
+
+            // Written here rather than on a timer: the end of an incident is exactly when the
+            // profile has finished moving, and Save is a no-op unless it actually changed.
+            if (_cfg.CriminalProfile) _profile.Save();
 
             Log.Info("Manhunt over: " + why + ".");
         }
@@ -229,6 +320,8 @@ namespace Precinct88.Response
 
             var elapsed = (now - _lastTick) / 1000f;
             _lastTick = now;
+
+            if (_cfg.CriminalProfile) _profile.Update();
 
             if (LawHold.Held)
             {
@@ -246,6 +339,7 @@ namespace Precinct88.Response
                 // Cool off whatever is left, so a near-miss does not carry into the next one.
                 if (_heat > 0f) _heat = Math.Max(0f, _heat - CoolPerSecond * elapsed);
 
+                Returned(me, now);
                 Adopt(me);
                 return;
             }
@@ -255,7 +349,7 @@ namespace Precinct88.Response
             if (seen)
             {
                 _lastSeenAt = now;
-                _radio.Describe(me);
+                _radio.Seen(me.Position);
 
                 _searchFrom = me.Position;
                 _searchRadius = 40f;
@@ -293,6 +387,7 @@ namespace Precinct88.Response
 
             PushStars();
             PushCentre(me);
+            PushAnonymity();
             PushDispatch();
         }
 
@@ -335,38 +430,81 @@ namespace Precinct88.Response
             // immediately drop it back to one and make the stars flicker.
             _heat = Math.Max(_heat, (level - 1) * PerStar + 0.1f);
 
-            Report(what, me.Position);
+            // Fully described. Whatever handed out these stars, the engine is already tracking
+            // the player personally -- adopting it as an ANONYMOUS crime would tell the mod
+            // nobody knows who he is while the game visibly does, and the two would fight.
+            Report(what, me.Position, Known.Face | Known.Clothes | Known.Vehicle);
+        }
+
+        /// <summary>
+        /// Came back to where you did it, while anybody still cared.
+        ///
+        /// Reported WITHOUT a description regardless of what they had before, because this is
+        /// not a sighting -- it is the location itself being of interest again. If somebody
+        /// there can actually see you, Eyes() will pick that up on the next tick and put the
+        /// description back where it belongs.
+        /// </summary>
+        private void Returned(Ped me, int now)
+        {
+            if (_sceneCold == 0 || now > _sceneCold) { _sceneCold = 0; return; }
+
+            try
+            {
+                if (me.Position.DistanceTo(_sceneAt) > SceneRange) return;
+            }
+            catch
+            {
+                return;
+            }
+
+            // Forgotten BEFORE the report, or the report re-enters this on the next tick with
+            // the player still standing on the same spot and it fires forever.
+            _sceneCold = 0;
+
+            Log.Info("Player returned to the scene of " + _sceneWhat + ".");
+
+            if (Say != null) Say("Dispatch: units still on scene.");
+
+            Report(_sceneWhat, _sceneAt);
         }
 
         // ---- sight -------------------------------------------------------------
 
         /// <summary>
-        /// Whether any officer can actually see the player, allowing for the description.
+        /// Whether any officer can see the player AND has reason to think it is him.
         ///
-        /// This is where DescriptionMatters earns its keep. A clear line of sight at sixty
-        /// metres to a man who no longer answers the description is an officer looking straight
-        /// at somebody he has no reason to stop -- so it does not count, and the search carries
-        /// on around him. Close enough and it counts anyway; a jacket is not a disguise at four
-        /// metres.
+        /// THIS IS WHERE THE FLAGS EARN THEIR KEEP. A clear line of sight at sixty metres to a
+        /// man who answers nothing on the call is an officer looking straight at somebody he
+        /// has no reason to stop -- so it does not count, and the search carries on around him.
+        ///
+        /// The old version had a close-range override: recognised anyway inside seven metres,
+        /// on the reasoning that a jacket is not a disguise at four metres. That was papering
+        /// over the single-bit model. It is gone, and the face flag replaces it properly -- if
+        /// they got a look at your face and it is uncovered, range never mattered; if all they
+        /// ever had was a shirt you have since changed, then standing next to an officer is
+        /// standing next to an officer, because there is nothing left for him to match you
+        /// against. Which is the correct and much more interesting answer.
+        ///
+        /// A sighting also UPGRADES the description. He is looking right at you, so he gets
+        /// your face if it is showing, what you are wearing, and what you are in.
         /// </summary>
         private bool Eyes(Ped me)
         {
-            var matches = !_cfg.DescriptionMatters || _radio.Matches(me);
+            var loose = !_cfg.DescriptionMatters;
 
             foreach (var officer in Cops.Near(me.Position, EyesOn))
             {
                 if (!Cops.Sees(officer, me, EyesOn)) continue;
 
-                if (matches) return true;
+                if (!loose && !_radio.Recognises(me)) continue;
 
-                if (officer.Position.DistanceTo(me.Position) < Radio.RecognisesAnywayRange)
-                {
-                    // Recognised in spite of the change. The description is now wrong and worth
-                    // re-taking, or every officer for the rest of the chase keeps having to get
-                    // within seven metres of a man they have already identified.
-                    _radio.Describe(me);
-                    return true;
-                }
+                // Everything he can see, and then a refresh of what they already had -- he is
+                // watching, so the call is current by definition. Without the refresh, changing
+                // cars in front of an officer beats a description he is looking at.
+                _radio.Note(me, Known.Face | Known.Clothes | Known.Vehicle);
+                _radio.Refresh(me);
+
+                return true;
             }
 
             return false;
@@ -453,6 +591,13 @@ namespace Precinct88.Response
             var ceiling = _worst == null ? 1 : _worst.Ceiling;
             if (ceiling > _cfg.MaxStars) ceiling = _cfg.MaxStars;
 
+            // A known quantity gets one more star of room on anything already serious. Never on
+            // a two-star offence -- being violent last week does not make speeding worse.
+            if (_cfg.CriminalProfile && _profile.Hardened && ceiling >= 3 && ceiling < _cfg.MaxStars)
+            {
+                ceiling++;
+            }
+
             var stars = (int)Math.Floor(_heat / PerStar) + 1;
             if (stars > ceiling) stars = ceiling;
             if (stars < 1) stars = 1;
@@ -501,6 +646,23 @@ namespace Precinct88.Response
             {
                 Log.Debug("Could not move the wanted centre: " + ex.Message);
             }
+        }
+
+        /// <summary>
+        /// Whether the engine's own officers are allowed to come after the player personally.
+        ///
+        /// This is what makes an unidentified crime actually feel unidentified. Without it the
+        /// mod holds a coherent belief -- nobody described him -- while the game's officers walk
+        /// up and open fire, because to the engine a wanted level simply means "attack". The
+        /// wanted CENTRE still sits on the crime scene either way, so they keep converging on
+        /// the street; they just have no reason to look twice at the man walking down it.
+        ///
+        /// Flips back the instant somebody identifies him, which is exactly the moment it
+        /// should: shooting again in front of an officer is a description.
+        /// </summary>
+        private void PushAnonymity()
+        {
+            LawHold.Ignore(_cfg.DescriptionMatters && _radio.Unidentified);
         }
 
         /// <summary>

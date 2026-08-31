@@ -108,6 +108,34 @@ namespace Precinct88.Response
             catch (Exception ex) { Log.Debug("Could not cap the law: " + ex.Message); }
         }
 
+        /// <summary>
+        /// Whether the game's own officers should act on the player personally.
+        ///
+        /// THE HOLLOW-STAR STATE DOES NOT WORK WITHOUT THIS. A crime nobody could describe puts
+        /// stars on screen and sends police to the location -- but the ENGINE reads a wanted
+        /// level as "attack this man", so its officers hunt him personally regardless of what
+        /// the mod thinks anybody knows. Ours behave; the game's do not, and the game's are
+        /// still there.
+        ///
+        /// SET_POLICE_IGNORE_PLAYER is the switch, and it goes through here rather than being
+        /// pushed at the call site because a hold ALSO uses it. Two systems setting one native
+        /// behind each other is the exact bug this whole class exists to prevent, so a hold
+        /// wins and this is a no-op while one is on -- nothing is more ignored than off.
+        /// </summary>
+        public static void Ignore(bool ignore)
+        {
+            if (Held) return;
+
+            try
+            {
+                Function.Call(Hash.SET_POLICE_IGNORE_PLAYER, Game.Player.Handle, ignore);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Could not set police attention: " + ex.Message);
+            }
+        }
+
         /// <summary>Back to whatever the ceiling was before anybody touched it.</summary>
         public static void Uncap()
         {

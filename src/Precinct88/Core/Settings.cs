@@ -123,6 +123,36 @@ namespace Precinct88.Core
         /// <summary>The ceiling. Five is vanilla; three makes the city feel a great deal smaller.</summary>
         public int MaxStars = 5;
 
+        /// <summary>
+        /// The strip under the wanted stars saying what they have on you.
+        ///
+        /// Off is a legitimate choice for somebody who wants to work it out from the street,
+        /// and the mechanic is unchanged either way -- the strip only reports.
+        /// </summary>
+        public bool ShowKnownStrip = true;
+
+        /// <summary>How far down the screen the strip sits. Under the stars, wherever those are.</summary>
+        public float KnownStripY = 0.083f;
+
+        /// <summary>
+        /// Cameras as a witness that is not a person.
+        ///
+        /// The counter to "do it where nobody is". Found as world props rather than from a
+        /// coordinate list, so they are wherever the game actually put them.
+        /// </summary>
+        public bool CamerasWatch = true;
+
+        /// <summary>
+        /// Whether how violently you work is remembered between incidents.
+        ///
+        /// Off makes every night the first night, which is vanilla and is a defensible thing
+        /// to want.
+        /// </summary>
+        public bool CriminalProfile = true;
+
+        /// <summary>Whether coming back to where you did it can put it back on you.</summary>
+        public bool SceneStaysWarm = true;
+
         // ---- contact -----------------------------------------------------------
 
         /// <summary>Officers who start something because they have a reason to.</summary>
@@ -213,6 +243,11 @@ namespace Precinct88.Core
                 s.LoseThemSeconds = Clamp(ini.GetFloat("Wanted", "LoseThemSeconds",
                                                        s.LoseThemSeconds), 5f, 300f);
                 s.MaxStars = (int)Clamp(ini.GetInt("Wanted", "MaxStars", s.MaxStars), 1f, 5f);
+                s.ShowKnownStrip = ini.GetBool("Wanted", "ShowKnownStrip", s.ShowKnownStrip);
+                s.KnownStripY = Clamp(ini.GetFloat("Wanted", "KnownStripY", s.KnownStripY), 0f, 0.9f);
+                s.CamerasWatch = ini.GetBool("Wanted", "CamerasWatch", s.CamerasWatch);
+                s.CriminalProfile = ini.GetBool("Wanted", "CriminalProfile", s.CriminalProfile);
+                s.SceneStaysWarm = ini.GetBool("Wanted", "SceneStaysWarm", s.SceneStaysWarm);
 
                 s.ContactEnabled = ini.GetBool("Contact", "Enabled", s.ContactEnabled);
                 s.StopForWeapons = ini.GetBool("Contact", "StopForWeapons", s.StopForWeapons);

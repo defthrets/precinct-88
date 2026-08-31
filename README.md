@@ -85,6 +85,58 @@ for, and a wait — which is the only part anybody argues about, and can be set 
 
 ---
 
+## What they know, and what you can beat
+
+Identification is not one bit. The police hold up to five separate things about you, gain them
+independently, and lose them independently:
+
+| Tag | What it is | How you beat it |
+|---|---|---|
+| `FACE` | Somebody got a proper look at you | **Cover it before the crime.** Nothing undoes it afterwards |
+| `FIT` | What you were wearing | Change clothes |
+| `CAR` | The model *and* the plate | Change vehicle, or get out and walk |
+| `GUN` | What it was done with | Nothing — it isn't a description of you |
+| `CAM` | There is footage | Nothing — a camera can't be talked to |
+
+A strip under the wanted stars shows them. **Red means they hold it and it still describes you.
+Grey means they hold it and it is now wrong** — a grey `FIT` is the force still looking for a man
+in the shirt you changed out of ten minutes ago, which is the single most useful thing the game
+can tell you. `NO ID` means a crime was called in and nobody could describe you at all.
+
+An officer only acts if *something* still matches. All they ever had was a jacket you've since
+changed? He looks straight at you and carries on, because there is nothing left to match you
+against.
+
+**A crime with no description is a real state**, and it's the one vanilla can't represent. Gunfire
+heard through a wall gets police converging on the street with a location and nothing else — and
+they are told to ignore you personally, so they search around a man they have no reason to look at
+twice. Shoot again where one of them can see you and it flips instantly.
+
+**Witnesses give what they actually got.** An officer gets everything. A civilian across the street
+gets your clothes and your car but couldn't pick you out of a line-up — only one close enough gets
+your face. Anyone who only *heard* it gives a location. And a witness has to survive to make the
+call, which players work out very quickly.
+
+**Cameras are the witness that isn't a person** — the counter to doing everything where nobody is
+standing. They're found as world props rather than from a coordinate list, so they're wherever
+Rockstar actually put them, and a map mod that adds a shop adds its camera for free.
+
+**Your criminal profile outlives the session.** Not a morality score — it doesn't care *what* you
+do, only *how*. Commit a crime and drive off and it barely moves; shoot the clerk and then the
+first officer through the door and it moves a long way, and the response runs colder for a while
+after. It bleeds off in real time, so leaving it alone is always the way back.
+
+**A crime scene stays warm.** In vanilla the meter runs out and the street is as innocent as it was
+that morning — you can drive back to the body and park. Here, coming back within a few minutes of
+something serious can put it back on you, once.
+
+> Most of this section mirrors what Rockstar showed of GTA VI's wanted system in *An Extended Look*
+> (August 2026) — witness-or-alarm reporting, icons for what police know, a hollow star for a crime
+> with no suspect, and an RDR2-style profile of how violently you work. The design was arrived at
+> here independently and then extended to match.
+
+---
+
 ## The panel — `F11`
 
 Two jobs, and the second is the reason it exists.
@@ -96,9 +148,10 @@ Enter toggles, Backspace closes.
 The other is the **status block along the bottom**, which prints what the police currently think:
 
 ```
-Davis                          density 0.95   attention 0.30
-units out 3   on a call 1          vanilla police suppressed
-searching 118m -- shots fired  (description stale)   Hoodrich bridged
+Davis                              density 0.95   attention 0.30
+units out 3   on a call 1              vanilla police suppressed
+searching 118m -- shots fired -- has FACE+FIT+CAR, you match CAR
+profile violent (0.61)                            face uncovered
 ```
 
 That block matters more than the settings do. The whole premise of this mod is a gap between where

@@ -36,6 +36,7 @@ namespace Precinct88
         private readonly Surrender _surrender;
         private readonly Booking _booking;
         private readonly SettingsScreen _screen;
+        private readonly KnownStrip _strip;
 
         private bool _parked;
         private bool _standDown;
@@ -73,6 +74,10 @@ namespace Precinct88
                 // is on the other end is not knowable yet -- its own script may not be built,
                 // and it registers a handler whenever it gets round to it.
                 _screen = new SettingsScreen(_cfg, _fleet, _hunt, () => Dispatch.Seizer != null);
+                _strip = new KnownStrip(_cfg, _hunt);
+
+                // The one thing in this mod that outlives a session.
+                if (_cfg.CriminalProfile) _hunt.Record.Load();
 
                 Wire();
 
@@ -261,6 +266,10 @@ namespace Precinct88
                 // it back on. See AmbientCops -- this is a lapse that looks exactly like a mod
                 // that never worked.
                 if (_cfg.PatrolEnabled && _cfg.SuppressVanillaPatrols) AmbientCops.Hold();
+
+                // Drawn after the systems have run, so it shows this frame's answer rather
+                // than last frame's. Under the panel, which draws in the finally below.
+                if (_strip != null) _strip.Draw();
             }
             catch (Exception ex)
             {
@@ -288,7 +297,16 @@ namespace Precinct88
                 if (_surrender != null) _surrender.Drop();
                 if (_stop != null) _stop.End("the mod is unloading", false);
 
-                if (_hunt != null) _hunt.RestoreDispatch();
+                if (_hunt != null)
+                {
+                    _hunt.RestoreDispatch();
+
+                    // Forced, because an unload is the one moment there is no later checkpoint
+                    // to rely on.
+                    if (_cfg.CriminalProfile) _hunt.Record.Save(true);
+                }
+
+                Cameras.Forget();
 
                 // The generator back on before the cars go, so the streets are not empty of
                 // police for the gap between this and whatever loads next.
