@@ -15,12 +15,63 @@ namespace Precinct88.Streets
         /// <summary>When he has finished his shift and can be let go.</summary>
         public int OffDutyAt;
 
-        /// <summary>Whether he walks a beat or stands on a corner.</summary>
+        /// <summary>Whether he walks a round or stands on a corner.</summary>
         public bool Wanders;
+
+        /// <summary>
+        /// Where he was put, so he can be sent back to it.
+        ///
+        /// Kept because a conversation takes him off his round -- without this he would resume
+        /// wandering from wherever the person he stopped happened to be stood, and over an
+        /// eight-minute shift he would drift across the district one chat at a time.
+        /// </summary>
+        public Vector3 PostedAt;
+
+        /// <summary>What he is in the middle of. See Chats.</summary>
+        public Errand Doing = Errand.Posted;
+
+        /// <summary>Who he is crossing to, or stood talking to. Never ours.</summary>
+        public Ped Subject;
+
+        /// <summary>When the current errand gives up or runs out.</summary>
+        public int StateUntil;
+
+        /// <summary>When he may next bother somebody.</summary>
+        public int NextChatAt;
+
+        /// <summary>When somebody says the next thing.</summary>
+        public int NextLineAt;
 
         public bool Alive => Cops.Alive(Who);
 
-        public void Release() => Cops.LetGo(Who);
+        /// <summary>
+        /// Hands him back, and whoever he was talking to with him.
+        ///
+        /// THE CIVILIAN IS THE PART THAT MATTERS HERE. A shift ending, a walk out of range, or
+        /// the mod unloading all come through this -- and any of them can land in the middle of
+        /// a conversation, leaving a pedestrian holding a look-at task aimed at a spot where an
+        /// officer used to be. It expires on its own eventually, which is exactly why it would
+        /// never have been traced back to here.
+        /// </summary>
+        public void Release()
+        {
+            try
+            {
+                if (Subject != null && Subject.Exists())
+                {
+                    Function.Call(Hash.TASK_CLEAR_LOOK_AT, Subject.Handle);
+                    Subject.MarkAsNoLongerNeeded();
+                }
+            }
+            catch
+            {
+                // He is gone, which is the outcome this was arranging anyway.
+            }
+
+            Subject = null;
+
+            Cops.LetGo(Who);
+        }
     }
 
     /// <summary>
@@ -88,12 +139,26 @@ namespace Precinct88.Streets
         private int _lastTick;
         private int _nextSpawn;
 
+        /// <summary>
+        /// Officers stopping to talk to people.
+        ///
+        /// Its own file and its own object rather than more of this one, so it can be taken
+        /// out again without unpicking foot patrol -- and so the thing being judged when
+        /// somebody says "the conversations look wrong" is one file.
+        /// </summary>
+        private readonly Chats _chats;
+
         /// <summary>Off while something louder is happening. Wired by Main.</summary>
         public Func<bool> Busy;
 
         public Foot(Settings cfg)
         {
             _cfg = cfg;
+
+            // The same Random, deliberately. Two of them seeded a millisecond apart on the
+            // same tick is the classic way to get two systems making identical "random"
+            // choices all session.
+            _chats = new Chats(_rng) { Repost = w => Post(w, w.PostedAt) };
         }
 
         public int Count => _out.Count;
@@ -116,8 +181,15 @@ namespace Precinct88.Streets
 
             Sweep(at, now);
 
-            if (Response.LawHold.Held) return;
-            if (Busy != null && Busy()) return;
+            var quiet = !Response.LawHold.Held && (Busy == null || !Busy());
+
+            // BEFORE THE RETURN, AND TICKED EITHER WAY. A hold that begins mid-sentence must
+            // still be able to end the sentence -- otherwise the officer holds a look-at at a
+            // man until the gang war is over, which is a considerably stranger sight than the
+            // conversation was. Only STARTING one is gated on things being quiet.
+            _chats.Update(_out, now, quiet);
+
+            if (!quiet) return;
 
             if (now >= _nextSpawn && _out.Count < Wanted(at)) TryPutOneOut(at, now);
         }
@@ -191,6 +263,12 @@ namespace Precinct88.Streets
                     Who = who,
                     OffDutyAt = now + ShiftMinMs + _rng.Next(ShiftMaxMs - ShiftMinMs),
                     Wanders = _rng.Next(100) < 60,
+                    PostedAt = spot,
+
+                    // Not immediately. An officer who materialises and walks straight at the
+                    // nearest person is a spawn with a task on it; one who has been on the
+                    // street a while first is an officer.
+                    NextChatAt = now + 8000 + _rng.Next(20000),
                 };
 
                 Post(walker, spot);
@@ -259,8 +337,17 @@ namespace Precinct88.Streets
         }
 
         /// <summary>Sets him walking, or standing somewhere doing something.</summary>
+        /// <summary>
+        /// Puts an officer on his round.
+        ///
+        /// Called on spawn and again every time a conversation ends, which is why it takes the
+        /// spot rather than reading his current position: sending him back to where he is
+        /// standing would leave him wandering out from wherever he last stopped somebody.
+        /// </summary>
         private void Post(Walker walker, Vector3 spot)
         {
+            if (walker == null || !walker.Alive) return;
+
             try
             {
                 if (walker.Wanders)

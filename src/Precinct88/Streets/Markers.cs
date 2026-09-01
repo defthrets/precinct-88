@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using GTA;
+using GTA.Native;
 using Precinct88.Core;
 
 namespace Precinct88.Streets
@@ -85,7 +86,7 @@ namespace Precinct88.Streets
                         // not what made four colours wrong.
                         Mark(unit.Car, Sprite(unit),
                              onACall ? BlipColor.Red : Police,
-                             onACall ? "Responding" : unit.Force,
+                             onACall ? "Responding" : "Police",
                              onACall ? 0.75f : 0.6f);
                     }
                 }
@@ -99,8 +100,10 @@ namespace Precinct88.Streets
                         wanted.Add(walker.Who.Handle);
 
                         // Smaller, so a man reads as smaller than a car without needing a
-                        // different shape.
-                        Mark(walker.Who, BlipSprite.Standard, Police, "On foot", 0.45f);
+                        // different shape -- and the SAME shape on purpose, because splitting
+                        // them by sprite puts a second police entry in the pause map legend
+                        // for what is the same thing standing up.
+                        Mark(walker.Who, BlipSprite.PoliceCarDot, Police, "Police", 0.45f);
                     }
                 }
 
@@ -116,22 +119,25 @@ namespace Precinct88.Streets
         }
 
         /// <summary>
-        /// A DOT, NOT THE CAR SPRITE.
+        /// The game's own police dot. Sprite 42.
         ///
-        /// BlipSprite.PoliceCar is FIXED ART -- a white car silhouette that ignores the colour
-        /// you set on it. So every unit came out white whatever force it belonged to, the whole
-        /// colour scheme silently did nothing, and the minimap filled with white cars that look
-        /// like the game's own markers rather than this mod's.
+        /// THE THIRD SPRITE THIS HAS BEEN, and each change was a real fault rather than taste.
         ///
-        /// Sprite 1 is the plain blip and it takes a tint properly, which is the whole reason
-        /// it is used here: everything on this map is police blue because it was TOLD to be,
-        /// and the car sprite cannot be told anything. A unit on a call is told apart by
-        /// colour rather than by shape -- red against the blue -- which reads better on a
-        /// minimap that size anyway.
+        /// PoliceCar (56) was first: fixed art, a white car silhouette that ignores the colour
+        /// set on it, so every unit came out white and the minimap filled with markers that
+        /// looked like the game's rather than this mod's.
+        ///
+        /// Standard (1) tinted blue was second, and it was worse in a way that only shows on
+        /// the pause map: sprite 1 in blue IS the game's FRIEND blip, so the legend dutifully
+        /// listed every patrol car in the city under "Friend".
+        ///
+        /// PoliceCarDot is the blip the game itself puts on a police vehicle. Its built-in
+        /// name is Police, so the legend is right even if the name below never applies, and it
+        /// is a dot rather than a vehicle silhouette -- which was the objection to 56.
         /// </summary>
         private static BlipSprite Sprite(Unit unit)
         {
-            return BlipSprite.Standard;
+            return BlipSprite.PoliceCarDot;
         }
 
         /// <summary>
@@ -152,10 +158,18 @@ namespace Precinct88.Streets
                 if (_blips.TryGetValue(what.Handle, out blip) && blip != null && blip.Exists())
                 {
                     // Kept up to date rather than recreated -- the COLOUR changes when a unit
-                    // goes from a beat to a call, and deleting and remaking a blip every second
+                    // goes from patrol to a call, and deleting and remaking a blip every second
                     // makes the whole map flicker.
                     blip.Color = colour;
                     blip.Scale = scale;
+
+                    // THE NAME TOO, EVERY PASS, and that is not belt and braces. It was set
+                    // once at creation and the pause map showed the game's default anyway --
+                    // a blip that has just been attached to an entity is not always ready to
+                    // be named, and the failure is silent and invisible until somebody opens
+                    // the map. Two native calls a second is nothing; being unable to trust
+                    // what the legend says is not.
+                    Name(blip, name);
                     return;
                 }
 
@@ -167,13 +181,43 @@ namespace Precinct88.Streets
                 blip.Color = colour;
                 blip.Scale = scale;
                 blip.IsShortRange = false;
-                blip.Name = name;
+
+                // Not grouped with anything, and no distance readout -- these are not
+                // destinations and a metre count next to every patrol car is noise.
+                blip.CategoryType = BlipCategoryType.NoDistanceShown;
+
+                Name(blip, name);
 
                 _blips[what.Handle] = blip;
             }
             catch (Exception ex)
             {
                 Log.Debug("Could not mark a unit: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Puts a name on a blip.
+        ///
+        /// By native rather than through the property, because this is the one thing here that
+        /// has already failed once in the game and been believed to work. It is a text command
+        /// -- begin, hand over the string, end against the handle -- and doing it in the open
+        /// means a future failure is visible in this file rather than somewhere in a wrapper.
+        /// </summary>
+        private static void Name(Blip blip, string text)
+        {
+            try
+            {
+                Function.Call(Hash.BEGIN_TEXT_COMMAND_SET_BLIP_NAME, "STRING");
+                // ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME is the literal-string component
+                // despite the name -- it has nothing to do with players and is what every
+                // "STRING" text command is fed. There is no Hash.STRING.
+                Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, text);
+                Function.Call(Hash.END_TEXT_COMMAND_SET_BLIP_NAME, blip.Handle);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Could not name a blip: " + ex.Message);
             }
         }
 
