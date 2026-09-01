@@ -21,7 +21,7 @@ namespace Precinct88.Response
     /// goes out sooner and heads towards the call rather than towards a patrol route. It still
     /// has to drive.
     ///
-    /// SO SOMETIMES NOBODY COMES, and that is correct rather than broken. Do a burnout in
+    /// SO SOMETIMES NOBODY COMES, and that is correct rather than broken. Throw a punch in
     /// Paleto Bay at four in the morning with one unit on the road forty streets away and the
     /// honest answer is that nothing happens for a long time. The districts have different
     /// densities precisely so that this is different in Davis.
@@ -182,24 +182,28 @@ namespace Precinct88.Response
         }
 
         /// <summary>
-        /// How many may be on it at once.
+        /// How many may be on it at once. The weight IS the number.
         ///
-        /// Small on purpose. More than this empties the district, the patrol stops existing,
-        /// and every street around goes quiet for the duration -- which is the opposite of what
-        /// a response should feel like.
+        /// ONE CAR FOR ALMOST EVERYTHING, and that was a correction rather than a tuning pass.
+        /// Three cars converging on a scuffle outside a shop is not a bigger response, it is a
+        /// less believable one -- and it empties the district, so the patrol stops existing and
+        /// every street around goes quiet for the duration. Only gunfire is worth two.
         /// </summary>
         private static int Most(int weight)
         {
-            if (weight >= 3) return 3;
-            if (weight == 2) return 2;
-
-            return 1;
+            return weight < 1 ? 1 : weight;
         }
 
-        /// <summary>Extra cars the district wants out while this is live.</summary>
+        /// <summary>
+        /// Extra cars the district wants out while this is live.
+        ///
+        /// Zero for a one-car call, which is the whole list except gunfire. A single unit
+        /// diverting off its patrol IS the response; asking the district to put another car on
+        /// the road as well would mean more police exist because you threw a punch.
+        /// </summary>
         private static int Extra(int weight)
         {
-            return weight >= 3 ? 2 : weight == 2 ? 1 : 0;
+            return weight - 1 < 0 ? 0 : weight - 1;
         }
 
         /// <summary>

@@ -105,8 +105,9 @@ namespace Precinct88.Core
         /// <summary>
         /// Whether the police react to what they see you doing.
         ///
-        /// Not the wanted system -- this is officers noticing a burnout, a gun in the street,
-        /// a car on the pavement, and driving over to look. No stars are given by any of it.
+        /// Not the wanted system -- this is officers noticing gunfire, a gun in the street, a
+        /// fight, a car being taken, and driving over to look. Most of it is only sometimes
+        /// reported, scaled by the district's attention. No stars are given by any of it.
         /// </summary>
         public bool RespondToCrime = true;
 

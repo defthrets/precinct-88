@@ -16,8 +16,28 @@ namespace Precinct88.Response
         /// <summary>How it is said out loud. Goes on the ticker and into the log.</summary>
         public readonly string Name;
 
-        /// <summary>How much of a response it is worth. 1 is a look, 3 is everybody near.</summary>
+        /// <summary>
+        /// How many cars it is worth, literally.
+        ///
+        /// It used to be an abstract severity from one to three that something else turned
+        /// into a number of cars, which meant two places to look and two things to keep in
+        /// step. It is the number of cars.
+        /// </summary>
         public readonly int Weight;
+
+        /// <summary>
+        /// The chance an officer who saw it actually does anything about it, as a percent.
+        ///
+        /// NOT EVERY OFFICER CARES ABOUT EVERY THING, and without this the police read as a
+        /// tripwire: do the thing anywhere near a uniform and a car is coming, every time,
+        /// which is both exhausting and obviously mechanical. A man walking down the street
+        /// with a pistol on show gets stopped sometimes. Gunfire gets reported always.
+        ///
+        /// Scaled by the district's Attention on top of this -- see Notice.Bothered. The same
+        /// pistol is a much bigger deal in Rockford Hills than it is in Davis, which is what
+        /// that number was always for and the first thing in this build to use it.
+        /// </summary>
+        public readonly int Chance;
 
         /// <summary>
         /// Heard rather than seen.
@@ -38,12 +58,14 @@ namespace Precinct88.Response
         /// <summary>When it may next be reported. Not a setting; bookkeeping.</summary>
         public int NextAt;
 
-        public Misdeed(string name, int weight, bool loud, int cooldownMs, Func<Ped, bool> happening)
+        public Misdeed(string name, int weight, bool loud, int cooldownMs, int chance,
+                       Func<Ped, bool> happening)
         {
             Name = name;
             Weight = weight;
             Loud = loud;
             CooldownMs = cooldownMs;
+            Chance = chance;
             Happening = happening;
         }
     }
@@ -58,11 +80,10 @@ namespace Precinct88.Response
     ///
     /// WHY THIS IS NOT THE ENGINE'S WANTED SYSTEM, and the reason the request needed its own
     /// file at all: the things worth noticing are mostly not crimes the game has an opinion
-    /// about. A burnout outside a school earns you nothing in vanilla. Standing in a crowd with
-    /// a rifle out earns you nothing until you point it at somebody. Driving down the pavement
-    /// earns you nothing at all. Every one of those is something a passing officer would
-    /// obviously react to, and none of them will ever produce a star on their own -- so hooking
-    /// this to the wanted level would have quietly dropped most of what was asked for.
+    /// about. Standing in a crowd with a rifle out earns you nothing until you point it at
+    /// somebody. A stand-up fight outside a shop earns you nothing at all. Both are things a
+    /// passing officer would obviously react to, and neither will ever produce a star on its
+    /// own -- so hooking this to the wanted level would have quietly dropped most of it.
     ///
     /// IT DELIBERATELY GIVES NO STARS. This reports what was seen; Callout sends somebody. The
     /// wanted level, the search, and what officers do when they arrive belong to Manhunt, which
@@ -72,7 +93,7 @@ namespace Precinct88.Response
     /// SOMEBODY OF OURS HAS TO BE THERE. There is no radius around the player inside which
     /// crime is magically known -- a report requires an actual officer, from the actual finite
     /// pool, who could actually see or hear it. That is the whole argument of the mod applied
-    /// to noticing rather than to responding, and it means a burnout down an empty side street
+    /// to noticing rather than to responding, and it means a fight down an empty side street
     /// at four in the morning really does go unnoticed.
     /// </summary>
     internal sealed class Notice
@@ -88,10 +109,22 @@ namespace Precinct88.Response
         /// <summary>How recent one of the engine's "time since" answers counts as now.</summary>
         private const int JustNowMs = 1500;
 
+        /// <summary>
+        /// How long before an officer who let something go looks at it again.
+        ///
+        /// Much shorter than the full cooldown, and the difference matters. A one-off -- a
+        /// punch, a car taken -- is simply MISSED when the roll fails, which is what makes the
+        /// chance mean anything. Something you are still doing thirty seconds later gets rolled
+        /// for again, so carrying a gun around long enough will eventually get you noticed
+        /// without any single moment being a coin flip you cannot lose.
+        /// </summary>
+        private const int ShrugMs = 12000;
+
         private readonly Settings _cfg;
         private readonly Fleet _fleet;
         private readonly Foot _foot;
         private readonly List<Misdeed> _list;
+        private readonly Random _rng = new Random();
 
         private int _lastTick;
 
@@ -110,50 +143,49 @@ namespace Precinct88.Response
         /// <summary>
         /// Everything worth noticing, in the order it is checked.
         ///
-        /// ROUGHLY WORST FIRST, because the first match on a tick wins and a man firing a gun
-        /// out of a car doing a burnout should be reported as the gun.
+        /// WORST FIRST, because the first match on a tick wins and a man firing a gun while
+        /// driving at people should be reported as the gun rather than as the driving.
         /// </summary>
         private static List<Misdeed> Build()
         {
+            // WHAT WAS TAKEN OUT, AND WHY IT IS WORTH RECORDING. The first version also
+            // reported burnouts, swinging a bat about, driving up on the pavement and driving
+            // on the wrong side. Every one of them was defensible and together they were
+            // unbearable: they are things a player does constantly and incidentally, so the
+            // police became a nagging presence attached to ordinary driving rather than
+            // something that happens when you do something worth noticing.
+            //
+            // The lesson is about the FLOOR rather than about those four in particular. The
+            // bottom of this list has to be something a reasonable person would agree is
+            // worth an officer's attention, because everything below that line turns the whole
+            // system into noise. If they come back it will be as something an officer mentions
+            // rather than something he drives across a district for.
             return new List<Misdeed>
             {
-                // Heard, not seen -- see Misdeed.Loud.
-                new Misdeed("shots fired", 3, true, 9000,
+                // Heard, not seen -- see Misdeed.Loud. The only thing here that always gets
+                // reported and the only thing worth more than one car.
+                new Misdeed("shots fired", 2, true, 9000, 100,
                             me => Function.Call<bool>(Hash.IS_PED_SHOOTING, me.Handle)),
 
-                new Misdeed("somebody pointing a gun", 3, false, 11000,
+                new Misdeed("somebody pointing a gun", 1, false, 11000, 80,
                             me => Firearm(me) &&
                                   Function.Call<bool>(Hash.IS_PLAYER_FREE_AIMING,
                                                       Game.Player.Handle)),
 
-                new Misdeed("a car being taken", 3, false, 18000,
+                new Misdeed("a car being taken", 1, false, 18000, 75,
                             me => Function.Call<bool>(Hash.IS_PED_JACKING, me.Handle)),
 
-                new Misdeed("a fight in the street", 3, false, 14000,
-                            me => Function.Call<bool>(Hash.IS_PED_IN_MELEE_COMBAT, me.Handle)),
-
-                new Misdeed("a car driven at people", 3, false, 12000,
+                new Misdeed("a car driven at people", 1, false, 12000, 70,
                             me => Driving(me) && Since(Hash.GET_TIME_SINCE_PLAYER_HIT_PED)),
 
-                // The two the request actually named.
-                new Misdeed("a gun out in the street", 2, false, 20000,
+                new Misdeed("a fight in the street", 1, false, 14000, 40,
+                            me => Function.Call<bool>(Hash.IS_PED_IN_MELEE_COMBAT, me.Handle)),
+
+                // THE RARE ONE. Carrying a gun about is not an event, it is a state, and it is
+                // true for most of the time anybody plays this game -- so it is reported
+                // seldom, and in Davis it is reported almost never.
+                new Misdeed("a gun out in the street", 1, false, 20000, 18,
                             me => Firearm(me) && !me.IsInVehicle()),
-
-                new Misdeed("a burnout", 2, false, 14000,
-                            me => Driving(me) &&
-                                  Function.Call<bool>(Hash.IS_VEHICLE_IN_BURNOUT,
-                                                      me.CurrentVehicle.Handle)),
-
-                new Misdeed("somebody swinging a bat about", 2, false, 20000,
-                            me => Melee(me) && !me.IsInVehicle()),
-
-                new Misdeed("a car up on the pavement", 1, false, 20000,
-                            me => Driving(me) &&
-                                  Since(Hash.GET_TIME_SINCE_PLAYER_DROVE_ON_PAVEMENT)),
-
-                new Misdeed("a car on the wrong side", 1, false, 25000,
-                            me => Driving(me) &&
-                                  Since(Hash.GET_TIME_SINCE_PLAYER_DROVE_AGAINST_TRAFFIC)),
             };
         }
 
@@ -198,6 +230,13 @@ namespace Precinct88.Response
                         if (!seen.Value) continue;
                     }
 
+                    if (!Bothered(what, me))
+                    {
+                        // Seen and let go. Not the full cooldown -- see ShrugMs.
+                        what.NextAt = now + ShrugMs;
+                        continue;
+                    }
+
                     what.NextAt = now + what.CooldownMs;
 
                     Log.Info("Noticed: " + what.Name + ".");
@@ -211,6 +250,38 @@ namespace Precinct88.Response
             catch (Exception ex)
             {
                 Log.Debug("Could not check what the police can see: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Whether the officer who saw it does anything about it.
+        ///
+        /// THE DISTRICT IS HALF OF THIS, and it is the first thing in the patrol build to use
+        /// the Attention number the districts have carried since the beginning. Rockford Hills
+        /// is 0.85 and Davis is 0.30 -- there are far fewer cars in Rockford and the one that
+        /// is there has already noticed you, while in Davis there are cars everywhere and none
+        /// of them care. Density and Attention being separate numbers is the mod's oldest
+        /// claim and this is where it finally shows.
+        ///
+        /// The floor keeps the least attentive district from being a free pass: a quarter of
+        /// the stated chance still gets through in Davis.
+        /// </summary>
+        private bool Bothered(Misdeed what, Ped me)
+        {
+            if (what.Chance >= 100) return true;
+
+            try
+            {
+                var here = Districts.At(me.Position);
+                var care = 0.25f + 0.75f * here.Attention;
+
+                return _rng.Next(100) < what.Chance * care;
+            }
+            catch
+            {
+                // Cannot tell where he is. Report it -- the alternative is silently policing
+                // nothing at all because a zone lookup failed.
+                return true;
             }
         }
 
@@ -334,12 +405,5 @@ namespace Precinct88.Response
                    group != WeaponGroup.NightVision;
         }
 
-        /// <summary>Something in your hands that is not a gun and is not nothing.</summary>
-        private static bool Melee(Ped me)
-        {
-            if (!Cops.Armed(me)) return false;
-
-            return me.Weapons.Current.Group == WeaponGroup.Melee;
-        }
     }
 }
