@@ -161,6 +161,15 @@ namespace Precinct88.Response
         /// <summary>Said when the ticker should carry a line. Set by Main.</summary>
         public Action<string> Say;
 
+        /// <summary>
+        /// Asked to write the record at a natural moment. Set by Main.
+        ///
+        /// The end of an incident is when the profile has stopped moving, which makes it the
+        /// right time to persist -- but this class does not own record.json and cannot, because
+        /// the licence is in there too and two writers means one of them loses a half.
+        /// </summary>
+        public Action Checkpoint;
+
         // ---- reporting ---------------------------------------------------------
 
         /// <summary>
@@ -301,9 +310,11 @@ namespace Precinct88.Response
             LawHold.Uncap();
             RestoreDispatch();
 
-            // Written here rather than on a timer: the end of an incident is exactly when the
-            // profile has finished moving, and Save is a no-op unless it actually changed.
-            if (_cfg.CriminalProfile) _profile.Save();
+            // A CHECKPOINT, not a save. The end of an incident is exactly when the profile has
+            // finished moving -- but this class no longer owns the file and must not, because
+            // the licence lives in it too. Main wires this to Core.Record, which writes both
+            // halves or neither.
+            if (Checkpoint != null) Checkpoint();
 
             Log.Info("Manhunt over: " + why + ".");
         }

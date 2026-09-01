@@ -209,6 +209,15 @@ namespace Precinct88.Core
         public float SpeedHudX = 0.5f;
         public float SpeedHudY = 0.895f;
 
+        /// <summary>
+        /// How long a charge stays on the licence, in real minutes.
+        ///
+        /// A record that only ever grows is a save file the player eventually abandons, and the
+        /// point of the decay is that driving properly for a while is a real way back. Zero
+        /// means charges never expire, which is a legitimate thing to want and a hard game.
+        /// </summary>
+        public float ChargeMinutes = 20f;
+
         /// <summary>Which kinds of vehicle the traffic laws are enforced on at all.</summary>
         public bool EnforceCars = true;
         public bool EnforceBikes = true;
@@ -316,6 +325,8 @@ namespace Precinct88.Core
                 s.EnforceCars = ini.GetBool("Contact", "EnforceCars", s.EnforceCars);
                 s.EnforceBikes = ini.GetBool("Contact", "EnforceBikes", s.EnforceBikes);
                 s.EnforceBicycles = ini.GetBool("Contact", "EnforceBicycles", s.EnforceBicycles);
+                s.ChargeMinutes = Clamp(ini.GetFloat("Contact", "ChargeMinutes",
+                                                     s.ChargeMinutes), 0f, 600f);
                 s.ShowSpeedLimit = ini.GetBool("Contact", "ShowSpeedLimit", s.ShowSpeedLimit);
                 s.SpeedInKph = ini.GetBool("Contact", "SpeedInKph", s.SpeedInKph);
                 s.SpeedHudX = Clamp(ini.GetFloat("Contact", "SpeedHudX", s.SpeedHudX), 0f, 1f);

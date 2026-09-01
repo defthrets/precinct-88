@@ -2,6 +2,7 @@ using System;
 using GTA;
 using GTA.Math;
 using GTA.Native;
+using Precinct88.Contact;
 using Precinct88.Core;
 using Precinct88.Response;
 using Precinct88.Streets;
@@ -70,6 +71,15 @@ namespace Precinct88.Custody
         private bool _blacked;
 
         /// <summary>
+        /// The licence, wiped on booking. Set by Main.
+        ///
+        /// Being booked IS the consequence, and carrying the points through afterwards is being
+        /// punished twice for one evening. Pull Me Over clears on arrest or death for the same
+        /// reason.
+        /// </summary>
+        public Licence Licence;
+
+        /// <summary>
         /// Takes everything the player should not walk out with.
         ///
         /// Same shape as the one on Stop and for the same reason: whoever is on the bridge
@@ -120,6 +130,7 @@ namespace Precinct88.Custody
             // achieved nothing.
             _hunt.Clear("arrested");
             if (_witness != null) _witness.Forget();
+            if (Licence != null) Licence.Wipe("arrested");
 
             // HELD, not capped, and released in Finish. For the length of a booking the player
             // genuinely is not a police matter -- he is already in their hands.

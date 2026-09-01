@@ -105,6 +105,7 @@ namespace Precinct88.UI
         private readonly Fleet _fleet;
         private readonly Manhunt _hunt;
         private readonly Func<bool> _bridged;
+        private readonly Licence _licence;
 
         private readonly List<Row> _rows = new List<Row>();
 
@@ -117,11 +118,13 @@ namespace Precinct88.UI
 
         public bool IsOpen { get; private set; }
 
-        public SettingsScreen(Settings cfg, Fleet fleet, Manhunt hunt, Func<bool> bridged)
+        public SettingsScreen(Settings cfg, Fleet fleet, Manhunt hunt, Licence licence,
+                              Func<bool> bridged)
         {
             _cfg = cfg;
             _fleet = fleet;
             _hunt = hunt;
+            _licence = licence;
             _bridged = bridged;
 
             Rows();
@@ -245,6 +248,9 @@ namespace Precinct88.UI
             Tick("Enforce on bicycles", "Contact", "EnforceBicycles",
                  () => _cfg.EnforceBicycles, v => _cfg.EnforceBicycles = v,
                  "Being pulled over on a BMX is funny exactly once");
+            Slide("Charges expire after", "Contact", "ChargeMinutes",
+                  () => _cfg.ChargeMinutes, v => _cfg.ChargeMinutes = v, 0f, 240f, 5f, "0", "m",
+                  note: "12 points and you are off the road. 0 never expires");
             Tick("Show speed and limit", "Contact", "ShowSpeedLimit",
                  () => _cfg.ShowSpeedLimit, v => _cfg.ShowSpeedLimit = v,
                  "A limit you cannot see is a trap, not a rule");
@@ -547,7 +553,7 @@ namespace Precinct88.UI
 
                 var bodyH = rows * RowH;
                 var headH = 0.055f;
-                var footH = 0.113f;
+                var footH = 0.134f;
 
                 var top = TopY;
 
@@ -690,6 +696,20 @@ namespace Precinct88.UI
             Screen.Text(Radio.Masked(Game.Player.Character) ? "face covered" : "face uncovered",
                         right, y, NoteScale,
                         Radio.Masked(Game.Player.Character) ? Good : Faint, rightAligned: true);
+
+            // Its own row. The licence and the profile are two different records of two
+            // different things, and sharing a line with one centred over the other is how you
+            // get text drawn through text.
+            y += 0.021f;
+
+            Screen.Text("licence " + Ticketing.Standing(_licence), left, y, NoteScale,
+                        _licence != null && _licence.IsSuspended ? Warn : Dim);
+
+            if (_licence != null && _licence.Owed > 0)
+            {
+                Screen.Text("owed $" + _licence.Owed.ToString("N0", CultureInfo.InvariantCulture),
+                            right, y, NoteScale, Faint, rightAligned: true);
+            }
 
             y += 0.021f;
 

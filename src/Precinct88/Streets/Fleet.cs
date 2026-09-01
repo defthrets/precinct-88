@@ -468,6 +468,7 @@ namespace Precinct88.Streets
                     // Rolled once and kept. Two officers who look at everybody, or two who
                     // look at nobody, for the whole of their round.
                     Interest = (float)_rng.NextDouble(),
+                    Temper = Contact.Ticketing.TemperFor(_rng),
                 };
 
                 // Two of them. One officer in a squad car is a mod that could not be bothered,

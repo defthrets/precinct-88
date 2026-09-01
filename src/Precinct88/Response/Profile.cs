@@ -142,47 +142,40 @@ namespace Precinct88.Response
         // ---- the record --------------------------------------------------------
 
         /// <summary>
-        /// Reads the profile back.
+        /// Whether this half of the record has moved since it was last written.
         ///
-        /// A missing file is a new player, not an error -- there is nothing here worth refusing
-        /// to start over, and this is the first thing in the mod that persists at all.
+        /// THE FILE IS NOT WRITTEN HERE ANY MORE. This used to own record.json outright and
+        /// write the whole document whenever violence changed -- which was fine while it was
+        /// the only thing in there, and became a bug the moment the licence needed to persist
+        /// too. Two systems each writing a complete file are two systems each deleting the
+        /// other's half. Core.Record owns it now; this only says what to put in and how to read
+        /// it back.
         /// </summary>
-        public void Load()
+        public bool Dirty => _dirty;
+
+        public void Clean() => _dirty = false;
+
+        public void ToJson(Json doc)
+        {
+            doc.Set("violence", Math.Round(_violence, 4));
+        }
+
+        public void FromJson(Json doc)
         {
             try
             {
-                var doc = JsonFile.Read(Paths.SaveFile);
-                if (doc == null || doc.IsNull) return;
+                if (doc == null) return;
 
                 _violence = doc["violence"].AsFloat(0f);
+
                 if (_violence < 0f) _violence = 0f;
                 if (_violence > 1f) _violence = 1f;
 
                 _dirty = false;
-
-                Log.Info("Criminal profile: " + Word + " (" + _violence.ToString("0.00") + ").");
             }
             catch (Exception ex)
             {
-                Log.Debug("Could not read the record: " + ex.Message);
-            }
-        }
-
-        /// <summary>Writes it, and only when it has actually moved.</summary>
-        public void Save(bool force = false)
-        {
-            if (!_dirty && !force) return;
-
-            try
-            {
-                var doc = Json.Object();
-                doc.Set("violence", Math.Round(_violence, 4));
-
-                if (JsonFile.Write(Paths.SaveFile, doc)) _dirty = false;
-            }
-            catch (Exception ex)
-            {
-                Log.Debug("Could not write the record: " + ex.Message);
+                Log.Debug("Could not read the profile: " + ex.Message);
             }
         }
     }

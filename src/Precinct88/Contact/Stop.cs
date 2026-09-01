@@ -138,6 +138,9 @@ namespace Precinct88.Contact
         /// <summary>Hand the player to Custody. Set by Main.</summary>
         public Action<string> Book;
 
+        /// <summary>What is on the player's licence. Set by Main; null is survivable.</summary>
+        public Licence Licence;
+
         /// <summary>
         /// Whether a screen is up and owns the controls.
         ///
@@ -524,10 +527,33 @@ namespace Precinct88.Contact
                 return;
             }
 
-            // Nothing. He gets a word and that is the whole of it -- which is the outcome that
-            // makes the other one mean anything. Said out loud rather than tickered, because
-            // somebody is standing in front of you saying it.
-            Screen.Said("Alright. On your way.");
+            // NOTHING ON YOU IS NOT NOTHING AT ALL.
+            //
+            // If this was a traffic stop there is still the thing he pulled you over for, and
+            // until now that cost precisely nothing -- the whole of the violation detector was
+            // a piece of machinery with no consequence on the end of it. A stop now settles:
+            // a warning, or a ticket with points.
+            if (_why == Why.Driving && Because.Count > 0 && Licence != null)
+            {
+                var line = Ticketing.Settle(Because, Licence,
+                                            _unit == null ? Temper.Normal : _unit.Temper, _cfg);
+
+                if (!string.IsNullOrEmpty(line))
+                {
+                    // WORDS, and this is one of the few places that earns them. An icon cannot
+                    // say how much, or how many points, or that you have two left.
+                    Screen.Ticker(line);
+                }
+
+                Screen.Said("Sign here.");
+            }
+            else
+            {
+                // Nothing at all. He gets a word and that is the whole of it -- which is the
+                // outcome that makes the other one mean anything.
+                Screen.Said("Alright. On your way.");
+            }
+
             Cops.Say(_officer, "GENERIC_BYE");
 
             End("they found nothing", true);

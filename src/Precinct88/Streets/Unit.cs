@@ -129,6 +129,15 @@ namespace Precinct88.Streets
         /// <summary>Which force this car belongs to. For the log and the panel.</summary>
         public string Force = "LSPD";
 
+        /// <summary>
+        /// How the two in this car are about their job today.
+        ///
+        /// Rolled once when the unit goes out and kept for its whole round, exactly like
+        /// Interest -- so being stopped twice by the same crew feels like being stopped twice
+        /// by the same crew, rather than by a dice roll wearing a uniform.
+        /// </summary>
+        public Contact.Temper Temper = Contact.Temper.Normal;
+
         private Vector3 _wasAt;
         private int _lookedAt;
         private int _nudges;
