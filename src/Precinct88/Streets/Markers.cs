@@ -103,7 +103,7 @@ namespace Precinct88.Streets
                         // different shape -- and the SAME shape on purpose, because splitting
                         // them by sprite puts a second police entry in the pause map legend
                         // for what is the same thing standing up.
-                        Mark(walker.Who, BlipSprite.PoliceCarDot, Police, "Police", 0.45f);
+                        Mark(walker.Who, BlipSprite.Standard, Police, "Police", 0.45f);
                     }
                 }
 
@@ -119,25 +119,27 @@ namespace Precinct88.Streets
         }
 
         /// <summary>
-        /// The game's own police dot. Sprite 42.
+        /// A plain dot. Sprite 1.
         ///
-        /// THE THIRD SPRITE THIS HAS BEEN, and each change was a real fault rather than taste.
+        /// FOURTH TIME, AND THE ROUND TRIP IS THE USEFUL PART. PoliceCar (56) was fixed white
+        /// car art that ignored the tint. Standard (1) in blue came next and the pause map
+        /// legend filed every patrol car in the city under "Friend". PoliceCarDot (42) fixed
+        /// the legend -- its built-in name really is Police -- and it is far too big: its art
+        /// is a chunky filled disc that swamps a minimap at any scale small enough to be
+        /// unobtrusive, and shrinking it further just makes an illegible smudge.
         ///
-        /// PoliceCar (56) was first: fixed art, a white car silhouette that ignores the colour
-        /// set on it, so every unit came out white and the minimap filled with markers that
-        /// looked like the game's rather than this mod's.
+        /// So back to the plain dot, which was always the right SIZE, with the actual cause of
+        /// the "Friend" label fixed instead of designed around: the name is now written by the
+        /// text command directly and re-applied every pass rather than set once at creation on
+        /// a blip that may not have been ready to take it. See Name below.
         ///
-        /// Standard (1) tinted blue was second, and it was worse in a way that only shows on
-        /// the pause map: sprite 1 in blue IS the game's FRIEND blip, so the legend dutifully
-        /// listed every patrol car in the city under "Friend".
-        ///
-        /// PoliceCarDot is the blip the game itself puts on a police vehicle. Its built-in
-        /// name is Police, so the legend is right even if the name below never applies, and it
-        /// is a dot rather than a vehicle silhouette -- which was the objection to 56.
+        /// If the legend ever says Friend again, that is the answer -- the naming did not take,
+        /// and the next thing to try is a different blue, since sprite 1 in BlipColor.Blue is
+        /// exactly the game's own friend marker.
         /// </summary>
         private static BlipSprite Sprite(Unit unit)
         {
-            return BlipSprite.PoliceCarDot;
+            return BlipSprite.Standard;
         }
 
         /// <summary>

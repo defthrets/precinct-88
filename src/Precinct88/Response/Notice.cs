@@ -8,6 +8,19 @@ using Precinct88.Streets;
 
 namespace Precinct88.Response
 {
+    /// <summary>Who saw it, which decides both whether and how fast anybody hears.</summary>
+    internal enum Sighted
+    {
+        /// <summary>Nobody at all. You got away with it.</summary>
+        Nobody,
+
+        /// <summary>One of ours. It goes out on the radio immediately.</summary>
+        Officer,
+
+        /// <summary>A passer-by. Somebody has to get their phone out first.</summary>
+        Public,
+    }
+
     /// <summary>
     /// One thing an officer could notice you doing, and what it takes to notice it.
     /// </summary>
@@ -90,11 +103,24 @@ namespace Precinct88.Response
     /// is still parked, and inventing a second half-version of it here is how the mod got into
     /// trouble in the first place.
     ///
-    /// SOMEBODY OF OURS HAS TO BE THERE. There is no radius around the player inside which
-    /// crime is magically known -- a report requires an actual officer, from the actual finite
-    /// pool, who could actually see or hear it. That is the whole argument of the mod applied
-    /// to noticing rather than to responding, and it means a fight down an empty side street
-    /// at four in the morning really does go unnoticed.
+    /// SOMEBODY HAS TO BE THERE. There is no radius around the player inside which crime is
+    /// magically known -- a report requires a real person, standing somewhere real, who could
+    /// actually see or hear it. That is the whole argument of the mod applied to noticing
+    /// rather than to responding, and it means a fight down an empty side street at four in
+    /// the morning genuinely goes unnoticed. Check the street before, and nothing happens.
+    ///
+    /// THE PUBLIC COUNT, AND THAT WAS THE HOLE. For a while only our own officers could
+    /// witness anything, which meant shooting a man in front of twenty people did nothing at
+    /// all unless a patrol car happened to be in the same street -- and that is a far stranger
+    /// claim than the one the mod was trying to make. Anybody can see you now.
+    ///
+    /// The difference between the two is SPEED, not eyesight. An officer has a radio and it
+    /// goes out at once. A passer-by has to get their phone out, so the report lands several
+    /// seconds later -- which is enough time to be round the corner, and is the difference
+    /// between being caught and being described.
+    ///
+    /// A passer-by is also markedly less likely to bother at all. Most people do not phone the
+    /// police about a man carrying a gun; they walk the other way.
     /// </summary>
     internal sealed class Notice
     {
@@ -105,6 +131,27 @@ namespace Precinct88.Response
 
         /// <summary>And how far a gunshot carries. Generous, because gunshots do.</summary>
         private const float HeardRange = 130f;
+
+        /// <summary>
+        /// How close a member of the public has to be to make anything out.
+        ///
+        /// Shorter than an officer's. Somebody walking to work is not scanning the street for
+        /// trouble, and the ten metres of difference is the whole of that idea.
+        /// </summary>
+        private const float PublicSeeRange = 45f;
+
+        /// <summary>
+        /// How much less likely a passer-by is to do anything than an officer.
+        ///
+        /// Most people do not phone the police about a man carrying a gun. Without this,
+        /// putting the public in as witnesses would have quietly undone all of the work that
+        /// made these reports rare -- there is always somebody about in the city.
+        /// </summary>
+        private const float PublicCare = 0.5f;
+
+        /// <summary>How long somebody takes to get their phone out and get through.</summary>
+        private const int CallInMinMs = 4500;
+        private const int CallInMaxMs = 10000;
 
         /// <summary>How recent one of the engine's "time since" answers counts as now.</summary>
         private const int JustNowMs = 1500;
@@ -127,6 +174,18 @@ namespace Precinct88.Response
         private readonly Random _rng = new Random();
 
         private int _lastTick;
+
+        /// <summary>
+        /// Something a passer-by saw and is in the middle of calling in.
+        ///
+        /// One at a time rather than a queue, and deliberately. Callout only ever runs one call
+        /// anyway, and a backlog of pending phone calls arriving one after another would give a
+        /// single moment several separate responses over the following half minute.
+        /// </summary>
+        private string _ringingIn;
+        private Vector3 _ringingWhere;
+        private int _ringingWeight;
+        private int _ringingAt;
 
         /// <summary>Name, where, weight. Wired to Callout by Main.</summary>
         public Action<string, Vector3, int> Report;
@@ -201,6 +260,16 @@ namespace Precinct88.Response
 
             try
             {
+                // WHOEVER IS ON THE PHONE, first and regardless of what is happening now.
+                // The call was placed about something that has already finished, and it has to
+                // land even if the player has since stopped, driven off, or died.
+                if (_ringingIn != null && now >= _ringingAt)
+                {
+                    Log.Info("Called in by a passer-by: " + _ringingIn + ".");
+                    Report(_ringingIn, _ringingWhere, _ringingWeight);
+                    _ringingIn = null;
+                }
+
                 var me = Game.Player.Character;
                 if (me == null || !me.Exists() || me.IsDead) return;
 
@@ -210,8 +279,8 @@ namespace Precinct88.Response
                 // driving badly (pavement, wrong side, and a burnout all at once) paid for
                 // three full line-of-sight sweeps of every officer on the map every half
                 // second, for one answer repeated three times.
-                bool? seen = null;
-                bool? heard = null;
+                Sighted? seen = null;
+                Sighted? heard = null;
 
                 foreach (var what in _list)
                 {
@@ -219,18 +288,25 @@ namespace Precinct88.Response
 
                     if (!Ask(what, me)) continue;
 
+                    Sighted by;
+
                     if (what.Loud)
                     {
-                        if (heard == null) heard = Anybody(me, true);
-                        if (!heard.Value) continue;
+                        if (heard == null) heard = Who(me, true);
+                        by = heard.Value;
                     }
                     else
                     {
-                        if (seen == null) seen = Anybody(me, false);
-                        if (!seen.Value) continue;
+                        if (seen == null) seen = Who(me, false);
+                        by = seen.Value;
                     }
 
-                    if (!Bothered(what, me))
+                    // NOBODY SAW IT. Not even a cooldown -- there is nothing to cool down from,
+                    // and setting one would mean an empty street quietly used up the allowance
+                    // for the busy one you walk into ten seconds later.
+                    if (by == Sighted.Nobody) continue;
+
+                    if (!Bothered(what, me, by))
                     {
                         // Seen and let go. Not the full cooldown -- see ShrugMs.
                         what.NextAt = now + ShrugMs;
@@ -239,7 +315,25 @@ namespace Precinct88.Response
 
                     what.NextAt = now + what.CooldownMs;
 
-                    Log.Info("Noticed: " + what.Name + ".");
+                    if (by == Sighted.Public)
+                    {
+                        // Somebody is getting their phone out. Dropped rather than queued if
+                        // one is already ringing in -- see the fields.
+                        if (_ringingIn == null)
+                        {
+                            _ringingIn = what.Name;
+                            _ringingWhere = me.Position;
+                            _ringingWeight = what.Weight;
+                            _ringingAt = now + CallInMinMs +
+                                         _rng.Next(CallInMaxMs - CallInMinMs);
+
+                            Log.Info("Seen by a passer-by: " + what.Name + ".");
+                        }
+
+                        return;
+                    }
+
+                    Log.Info("Noticed by an officer: " + what.Name + ".");
                     Report(what.Name, me.Position, what.Weight);
 
                     // One a tick. Reporting four things at once from one moment produces four
@@ -266,14 +360,17 @@ namespace Precinct88.Response
         /// The floor keeps the least attentive district from being a free pass: a quarter of
         /// the stated chance still gets through in Davis.
         /// </summary>
-        private bool Bothered(Misdeed what, Ped me)
+        private bool Bothered(Misdeed what, Ped me, Sighted by)
         {
+            // Gunfire, and only gunfire. Everyone reports it, including the public.
             if (what.Chance >= 100) return true;
 
             try
             {
                 var here = Districts.At(me.Position);
                 var care = 0.25f + 0.75f * here.Attention;
+
+                if (by == Sighted.Public) care *= PublicCare;
 
                 return _rng.Next(100) < what.Chance * care;
             }
@@ -307,13 +404,72 @@ namespace Precinct88.Response
         // ---- who was there -----------------------------------------------------
 
         /// <summary>
-        /// Whether any officer of ours could have seen or heard it.
+        /// Who, if anybody, could have seen or heard it.
         ///
-        /// Foot officers are included and it matters more than it looks: they are the only
-        /// police in this mod who are ever on a pavement, in a crowd, or up an alley -- which
-        /// is exactly where the things in the list above tend to happen.
+        /// OURS FIRST AND IT SHORT-CIRCUITS. An officer outranks a passer-by -- his report is
+        /// immediate rather than a phone call, and he is more likely to make one -- so finding
+        /// one means there is no reason to sweep the crowd as well.
+        ///
+        /// Foot officers count and matter more than they look: they are the only police in this
+        /// mod ever on a pavement, in a crowd, or up an alley, which is exactly where the
+        /// things in the list above tend to happen.
         /// </summary>
-        private bool Anybody(Ped me, bool loud)
+        private Sighted Who(Ped me, bool loud)
+        {
+            if (Ours(me, loud)) return Sighted.Officer;
+
+            return Public(me, loud) ? Sighted.Public : Sighted.Nobody;
+        }
+
+        /// <summary>
+        /// Anybody at all who is not one of our units.
+        ///
+        /// VANILLA POLICE ARE NOT EXCLUDED, deliberately. Scenario officers stood outside a
+        /// station are left in the world on purpose (see AmbientCops) and doing something in
+        /// front of one and having nothing whatever happen looks far worse than the small
+        /// inconsistency of a uniformed man phoning it in like anybody else. He is not one of
+        /// the finite pool, so he does not get the pool's immediate radio -- which is the
+        /// honest way to hold both ideas at once.
+        ///
+        /// Returns on the FIRST person found rather than counting them. Whether one person or
+        /// forty saw it changes nothing here; the district's Attention already carries how much
+        /// somewhere is the sort of place that reports things.
+        /// </summary>
+        private static bool Public(Ped me, bool loud)
+        {
+            var range = loud ? HeardRange : PublicSeeRange;
+
+            try
+            {
+                foreach (var ped in World.GetNearbyPeds(me, range))
+                {
+                    if (ped == null || !ped.Exists() || ped.IsDead) continue;
+                    if (ped.Handle == me.Handle) continue;
+                    if (!ped.IsHuman) continue;
+
+                    // Nobody in a lift, under the map, or otherwise not really present.
+                    if (!ped.IsAlive) continue;
+
+                    if (loud)
+                    {
+                        // No line of sight needed. A gunshot goes through a wall and so does
+                        // the person on the other side of it reaching for their phone.
+                        return true;
+                    }
+
+                    if (Cops.Sees(ped, me, range)) return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Could not look for witnesses: " + ex.Message);
+            }
+
+            return false;
+        }
+
+        /// <summary>Whether one of our own officers could have seen or heard it.</summary>
+        private bool Ours(Ped me, bool loud)
         {
             if (_fleet != null)
             {
