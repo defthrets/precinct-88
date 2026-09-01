@@ -248,6 +248,9 @@ namespace Precinct88.UI
             Tick("Enforce on bicycles", "Contact", "EnforceBicycles",
                  () => _cfg.EnforceBicycles, v => _cfg.EnforceBicycles = v,
                  "Being pulled over on a BMX is funny exactly once");
+            Tick("Seize on suspension", "Contact", "SeizeOnSuspension",
+                 () => _cfg.SeizeOnSuspension, v => _cfg.SeizeOnSuspension = v,
+                 "Locked against you, not removed. Back when the licence is");
             Slide("Charges expire after", "Contact", "ChargeMinutes",
                   () => _cfg.ChargeMinutes, v => _cfg.ChargeMinutes = v, 0f, 240f, 5f, "0", "m",
                   note: "12 points and you are off the road. 0 never expires");

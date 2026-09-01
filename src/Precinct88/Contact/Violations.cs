@@ -24,6 +24,16 @@ namespace Precinct88.Contact
         Wreck,
         Phone,
         Burnout,
+
+        /// <summary>
+        /// Driving while your licence is gone.
+        ///
+        /// The teeth of the whole record. Without it a suspension is a word in a panel: you
+        /// carry on driving the same car past the same officers and nothing about the world has
+        /// changed. With it, being suspended makes the act of driving itself the offence, which
+        /// is what a disqualification actually is.
+        /// </summary>
+        Disqualified,
     }
 
     /// <summary>
@@ -99,6 +109,9 @@ namespace Precinct88.Contact
 
         private readonly Settings _cfg;
 
+        /// <summary>What is on the licence, for the one offence that depends on it.</summary>
+        private readonly Licence _licence;
+
         /// <summary>When each violation started being true. 0 when it is not.</summary>
         private readonly Dictionary<Violation, int> _since = new Dictionary<Violation, int>();
 
@@ -110,9 +123,10 @@ namespace Precinct88.Contact
 
         private int _lastTick;
 
-        public Violations(Settings cfg)
+        public Violations(Settings cfg, Licence licence)
         {
             _cfg = cfg;
+            _licence = licence;
         }
 
         /// <summary>Everything currently committed. Live list; do not hold it.</summary>
@@ -203,6 +217,10 @@ namespace Precinct88.Contact
             Instant(Violation.Burnout, Burnout(car), now);
 
             Instant(Violation.RedLight, RanTheLight(car, speed), now);
+
+            // Not a state of the car or of the driving. A state of YOU, and the only violation
+            // here that you cannot stop committing by driving better.
+            Instant(Violation.Disqualified, _licence != null && _licence.IsSuspended, now);
         }
 
         private bool Speeding(Vehicle car, float speed)
@@ -539,6 +557,7 @@ namespace Precinct88.Contact
                 case Violation.Wreck: return "an unroadworthy vehicle";
                 case Violation.Phone: return "using a phone at the wheel";
                 case Violation.Burnout: return "a burnout in a public street";
+                case Violation.Disqualified: return "driving while disqualified";
                 default: return "a traffic offence";
             }
         }
@@ -554,6 +573,10 @@ namespace Precinct88.Contact
         {
             switch (what)
             {
+                // Above everything. A disqualified driver is the one thing on this list that
+                // is never a conversation.
+                case Violation.Disqualified: return 4;
+
                 case Violation.HitPed: return 3;
                 case Violation.RedLight: return 3;
                 case Violation.WrongWay: return 3;

@@ -121,6 +121,17 @@ namespace Precinct88.Contact
         /// <summary>When the siren goes off and leaves just the bar lit.</summary>
         private int _quietAt;
 
+        /// <summary>
+        /// The car he was driving when this began.
+        ///
+        /// REMEMBERED AT THE START, not read at the end. A stop takes a minute and the player
+        /// very often gets out during it -- so asking what he is driving at the moment of the
+        /// outcome finds nothing, and a suspended driver who stepped out of his car would have
+        /// been handed a ticket instead of losing it. Which is the exact case the seizure
+        /// exists for.
+        /// </summary>
+        private Vehicle _theirs;
+
         /// <summary>How long the whoop lasts before it is only lights.</summary>
         private const int WhoopMs = 4200;
 
@@ -140,6 +151,9 @@ namespace Precinct88.Contact
 
         /// <summary>What is on the player's licence. Set by Main; null is survivable.</summary>
         public Licence Licence;
+
+        /// <summary>Where seized cars go. Set by Main; null is survivable.</summary>
+        public Impound Impound;
 
         /// <summary>
         /// Whether a screen is up and owns the controls.
@@ -194,6 +208,8 @@ namespace Precinct88.Contact
 
             var me = Game.Player.Character;
             var inCar = me != null && me.Exists() && me.IsInVehicle();
+
+            _theirs = inCar ? me.CurrentVehicle : null;
 
             _at = inCar ? Beat.Pulling : Beat.Approaching;
 
@@ -535,6 +551,26 @@ namespace Precinct88.Contact
             // a warning, or a ticket with points.
             if (_why == Why.Driving && Because.Count > 0 && Licence != null)
             {
+                // SUSPENDED MEANS THE CAR GOES, not that the fine is bigger. Writing a ticket
+                // to somebody who has already lost their licence is the mod declining to
+                // enforce the thing it just took off them.
+                if (Licence.IsSuspended && Impound != null)
+                {
+                    // The car he was stopped IN, remembered at the start -- see _theirs. He may
+                    // well be standing beside it by now.
+                    var driving = Cops.Alive(_theirs) ? _theirs : me.CurrentVehicle;
+
+                    if (Cops.Alive(driving))
+                    {
+                        Impound.Seize(driving, me);
+
+                        Screen.Said("You are not driving anything today. Out.");
+
+                        End("the vehicle was seized", true);
+                        return;
+                    }
+                }
+
                 var line = Ticketing.Settle(Because, Licence,
                                             _unit == null ? Temper.Normal : _unit.Temper, _cfg);
 
@@ -714,6 +750,7 @@ namespace Precinct88.Contact
             _at = Beat.None;
             _unit = null;
             _officer = null;
+            _theirs = null;
             _handsUp = false;
             Because = new List<Violation>();
 

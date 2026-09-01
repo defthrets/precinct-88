@@ -226,6 +226,10 @@ namespace Precinct88.Contact
         {
             switch (what)
             {
+                // No points. You have already run out of licence to put them on, and adding
+                // more to a suspension that is already total is arithmetic for its own sake.
+                case Violation.Disqualified: return 0;
+
                 case Violation.HitPed: return 3;
                 case Violation.RedLight: return 3;
                 case Violation.WrongWay: return 3;
@@ -249,6 +253,7 @@ namespace Precinct88.Contact
         {
             switch (what)
             {
+                case Violation.Disqualified: return 1500;
                 case Violation.HitPed: return 900;
                 case Violation.RedLight: return 500;
                 case Violation.WrongWay: return 500;

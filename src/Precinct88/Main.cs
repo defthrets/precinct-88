@@ -35,6 +35,7 @@ namespace Precinct88
         private readonly Watch _watch;
         private readonly Violations _violations;
         private readonly Licence _licence;
+        private readonly Impound _impound;
         private readonly Surrender _surrender;
         private readonly Booking _booking;
         private readonly SettingsScreen _screen;
@@ -70,8 +71,9 @@ namespace Precinct88
                 _hunt = new Manhunt(_cfg, _fleet);
                 _witness = new Witness(_cfg, _hunt);
                 _stop = new Stop(_cfg, _hunt);
-                _violations = new Violations(_cfg);
                 _licence = new Licence { ExpireMinutes = _cfg.ChargeMinutes };
+                _impound = new Impound(_cfg, _licence);
+                _violations = new Violations(_cfg, _licence);
                 _watch = new Watch(_cfg, _fleet, _stop, _violations);
                 _surrender = new Surrender(_cfg, _hunt);
                 _booking = new Booking(_cfg, _hunt, _witness);
@@ -143,6 +145,7 @@ namespace Precinct88
             _stop.Book = reason => _booking.Begin(null, reason);
 
             _stop.Licence = _licence;
+            _stop.Impound = _impound;
             _booking.Licence = _licence;
 
             _surrender.Book = (officer, reason) => _booking.Begin(officer, reason);
@@ -362,6 +365,11 @@ namespace Precinct88
                 //    noticed at the moment it happens rather than at the moment somebody looks.
                 _violations.Update();
 
+                // Keeps the locks on anything taken, and gives it back when the licence
+                // returns. Re-asserted, because the game resets door lock state on plenty of
+                // things nothing gets told about.
+                _impound.Update();
+
                 // 7. Whether to start a stop.
                 _watch.Update();
 
@@ -422,6 +430,10 @@ namespace Precinct88
                 }
 
                 Cameras.Forget();
+
+                // Nothing stays locked after the mod unloads. A player left unable to open his
+                // own car by a script that is no longer running has no way to work out why.
+                if (_impound != null) _impound.Release("the mod is unloading");
 
                 // The generator back on before the cars go, so the streets are not empty of
                 // police for the gap between this and whatever loads next.

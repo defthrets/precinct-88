@@ -210,6 +210,19 @@ namespace Precinct88.Core
         public float SpeedHudY = 0.895f;
 
         /// <summary>
+        /// Whether losing your licence costs you the car you are stopped in.
+        ///
+        /// Without it a suspension is a word in a panel -- you carry on driving the same car
+        /// past the same officers and nothing has changed.
+        ///
+        /// The car is LOCKED against you rather than removed. Actually taking a vehicle away
+        /// means deciding where it went and whether it still exists, and one deleted out from
+        /// under a player is unrecoverable in a way a locked one never is. It unlocks when the
+        /// licence comes back.
+        /// </summary>
+        public bool SeizeOnSuspension = true;
+
+        /// <summary>
         /// How long a charge stays on the licence, in real minutes.
         ///
         /// A record that only ever grows is a save file the player eventually abandons, and the
@@ -325,6 +338,8 @@ namespace Precinct88.Core
                 s.EnforceCars = ini.GetBool("Contact", "EnforceCars", s.EnforceCars);
                 s.EnforceBikes = ini.GetBool("Contact", "EnforceBikes", s.EnforceBikes);
                 s.EnforceBicycles = ini.GetBool("Contact", "EnforceBicycles", s.EnforceBicycles);
+                s.SeizeOnSuspension = ini.GetBool("Contact", "SeizeOnSuspension",
+                                                  s.SeizeOnSuspension);
                 s.ChargeMinutes = Clamp(ini.GetFloat("Contact", "ChargeMinutes",
                                                      s.ChargeMinutes), 0f, 600f);
                 s.ShowSpeedLimit = ini.GetBool("Contact", "ShowSpeedLimit", s.ShowSpeedLimit);
