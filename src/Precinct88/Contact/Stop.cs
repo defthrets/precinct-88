@@ -118,6 +118,12 @@ namespace Precinct88.Contact
         /// <summary>When any stop may next begin. One clock for the whole force.</summary>
         private int _nextAllowed;
 
+        /// <summary>When the siren goes off and leaves just the bar lit.</summary>
+        private int _quietAt;
+
+        /// <summary>How long the whoop lasts before it is only lights.</summary>
+        private const int WhoopMs = 4200;
+
         /// <summary>
         /// What the player is carrying, asked of whoever is listening on the bridge.
         ///
@@ -190,7 +196,12 @@ namespace Precinct88.Contact
 
             if (inCar)
             {
-                unit.Lights(true);
+                // Full noise to get your attention, and only briefly -- see the handover to
+                // Watching in Pulling. A siren that runs for the whole stop is a mod that has
+                // never watched one happen.
+                unit.Light(Lamps.Urgent);
+                _quietAt = Game.GameTime + WhoopMs;
+
                 Cops.Megaphone(unit.Driver, "COP_ARREST_PLAYER");
 
                 // No ticker. The octagon on the HUD says a stop is happening for as long as one
@@ -198,7 +209,8 @@ namespace Precinct88.Contact
             }
             else
             {
-                unit.Lights(false);
+                // On foot, nothing. He is walking over to talk to you.
+                unit.Light(Lamps.Dark);
                 Cops.Megaphone(unit.Driver, Line(why));
             }
 
@@ -264,6 +276,13 @@ namespace Precinct88.Contact
         /// <summary>Getting behind the car, so the player knows who is being pulled over.</summary>
         private void Pulling(Ped me, int now)
         {
+            // Down to lights only once the whoop has done its job.
+            if (_quietAt != 0 && now > _quietAt && _unit != null && _unit.Alive)
+            {
+                _unit.Light(Lamps.Watching);
+                _quietAt = 0;
+            }
+
             var car = me.CurrentVehicle;
 
             if (!Cops.Alive(car) || car.Driver == null || car.Driver.Handle != me.Handle)

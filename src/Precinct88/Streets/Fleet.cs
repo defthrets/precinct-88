@@ -376,7 +376,47 @@ namespace Precinct88.Streets
                 // distance is the exact thing this mod exists to stop doing.
                 if (OnScreen(spot)) continue;
 
+                // AND NOT ON TOP OF SOMEBODY ELSE'S SCENE. Another mod's callout, a scripted
+                // roadblock, an ambulance at a crash -- all of them put emergency vehicles
+                // somewhere deliberate, and a beat car materialising into the middle of one is
+                // this mod damaging a scene it cannot see.
+                if (EmergencyNear(spot)) continue;
+
                 return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Whether somebody else's emergency vehicle is already here.
+        ///
+        /// Cheap and deliberately broad: any police, ambulance or fire vehicle within thirty
+        /// metres means something is going on at this spot that this mod did not start, and the
+        /// right answer is to spawn somewhere else. Costs one nearby-vehicle scan on a spawn
+        /// attempt, which happens at most every few seconds.
+        /// </summary>
+        private static bool EmergencyNear(Vector3 where)
+        {
+            try
+            {
+                foreach (var car in World.GetNearbyVehicles(where, 30f))
+                {
+                    if (car == null || !car.Exists()) continue;
+
+                    // The Emergency class is police, ambulance and fire in one bucket, which is
+                    // exactly the set worth standing clear of -- anything in it is somewhere on
+                    // purpose. Helicopters are their own class, so an air unit overhead is
+                    // asked about separately.
+                    if (car.ClassType == VehicleClass.Emergency) return true;
+
+                    if (car.ClassType == VehicleClass.Helicopters && car.IsSirenActive) return true;
+                }
+            }
+            catch
+            {
+                // Cannot tell, so allow it. Refusing every spawn on an exception would empty
+                // the streets.
             }
 
             return false;

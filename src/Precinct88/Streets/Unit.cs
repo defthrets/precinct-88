@@ -30,6 +30,30 @@ namespace Precinct88.Streets
     }
 
     /// <summary>
+    /// What the light bar is doing.
+    ///
+    /// A BOOLEAN WAS THE BUG. The old signature was Lights(bool urgent), where false meant
+    /// "lights, but muted" -- and every routine call site passed false meaning "no lights at
+    /// all". So every beat car in the map drove its whole round with the bar lit, and a parked
+    /// one sat flashing at an empty street. It read as an incident everywhere, permanently,
+    /// which is the exact opposite of ambient, and it was visible in the first screenshot
+    /// anybody took of this mod.
+    ///
+    /// Three states, named, so a call site cannot mean the wrong one by accident.
+    /// </summary>
+    internal enum Lamps
+    {
+        /// <summary>Nothing on. What a patrol car looks like almost all of the time.</summary>
+        Dark,
+
+        /// <summary>Bar lit, no noise. Stopped at something, or arrived at a call.</summary>
+        Watching,
+
+        /// <summary>Bar and siren. On the way to something.</summary>
+        Urgent,
+    }
+
+    /// <summary>
     /// One car, the two in it, and the orders it is currently under.
     ///
     /// A unit is a THING THAT PERSISTS, which is the whole difference between this and the
@@ -133,7 +157,9 @@ namespace Precinct88.Streets
             CallReason = null;
 
             Drive(to, CruiseSpeed, CruiseStyle);
-            Lights(false);
+
+            // DARK. A car on a beat is a car with nothing happening.
+            Light(Lamps.Dark);
         }
 
         /// <summary>
@@ -151,7 +177,7 @@ namespace Precinct88.Streets
             CallReason = reason;
 
             Drive(to, ResponseSpeed, UrgentStyle);
-            Lights(true);
+            Light(Lamps.Urgent);
 
             Cops.Megaphone(Driver, "CHASE_SOLO");
         }
@@ -200,7 +226,9 @@ namespace Precinct88.Streets
             MoveOnAt = until;
             Target = kerb;
 
-            Lights(false);
+            // Also dark. A patrol car pulled in at the kerb watching a street is not an
+            // incident, and lighting it up says one is happening.
+            Light(Lamps.Dark);
 
             try
             {
@@ -224,7 +252,7 @@ namespace Precinct88.Streets
             CallReason = null;
 
             Drive(goHome, ResponseSpeed, CruiseStyle);
-            Lights(false);
+            Light(Lamps.Dark);
         }
 
         // ---- the tick ----------------------------------------------------------
@@ -262,7 +290,10 @@ namespace Precinct88.Streets
                         Doing = Duty.Searching;
                         MoveOnAt = now + 20000 + rng.Next(15000);
 
-                        Lights(true);
+                        // ARRIVED. Bar on, siren off -- they are here now, and a siren that
+                        // keeps going after a unit has stopped is the thing every police mod
+                        // gets wrong.
+                        Light(Lamps.Watching);
                         Cops.Megaphone(Driver, "SURROUNDED");
                     }
                     break;
@@ -345,13 +376,22 @@ namespace Precinct88.Streets
         /// SET_VEHICLE_HAS_MUTED_SIRENS is for, and without it every parked unit in the city
         /// is howling. The noise is turned back on only for a real response.
         /// </summary>
-        public void Lights(bool urgent)
+        public void Light(Lamps how)
         {
             try
             {
                 if (!Cops.Alive(Car)) return;
 
-                Function.Call(Hash.SET_VEHICLE_HAS_MUTED_SIRENS, Car.Handle, !urgent);
+                if (how == Lamps.Dark)
+                {
+                    Car.IsSirenActive = false;
+                    return;
+                }
+
+                // MUTED SIRENS is what separates a lit bar from a howling one. Without it every
+                // car stopped anywhere in the city is making noise, which is the other half of
+                // why this looked wrong.
+                Function.Call(Hash.SET_VEHICLE_HAS_MUTED_SIRENS, Car.Handle, how == Lamps.Watching);
                 Car.IsSirenActive = true;
             }
             catch (Exception ex)
