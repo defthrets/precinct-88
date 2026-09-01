@@ -197,6 +197,9 @@ namespace Precinct88.UI
             Tick("Blips on our police", "Patrol", "PoliceBlips",
                  () => _cfg.PoliceBlips, v => _cfg.PoliceBlips = v,
                  "Colour is the force. Dot on a beat, car on a call");
+            Slide("Onlookers at held scenes", "Patrol", "OnlookerUnits",
+                  () => _cfg.OnlookerUnits, v => _cfg.OnlookerUnits = (int)v, 0f, 6f, 1f, "0",
+                  note: "They park at the edge of a gang war. They do not go in");
             Tick("Crime scenes", "Patrol", "CrimeScenes",
                  () => _cfg.CrimeScenes, v => _cfg.CrimeScenes = v,
                  "Ambulance, then a coned-off scene, then the coroner");

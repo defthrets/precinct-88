@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using GTA;
+using GTA.Math;
 using GTA.Native;
 using Precinct88.Core;
 
@@ -42,6 +43,16 @@ namespace Precinct88.Response
         /// </summary>
         public static int ReleasedAt { get; private set; }
 
+        /// <summary>
+        /// Where the player was when the first hold went on.
+        ///
+        /// A hold means "none of this is a police matter", which is true of the SHOOTING and
+        /// not of the STREET. Somebody has to know roughly where it is happening for anybody to
+        /// stand at the edge of it, and the player's own position when a gang war starts is as
+        /// good an address as this mod is ever going to get.
+        /// </summary>
+        public static Vector3 HeldAt { get; private set; }
+
         /// <summary>Whether anybody is currently holding the police off.</summary>
         public static bool Held => Holders.Count > 0;
 
@@ -74,6 +85,10 @@ namespace Precinct88.Response
             {
                 try
                 {
+                    HeldAt = Game.Player.Character != null && Game.Player.Character.Exists()
+                        ? Game.Player.Character.Position
+                        : Vector3.Zero;
+
                     _wasMax = Function.Call<int>(Hash.GET_MAX_WANTED_LEVEL);
                     if (_wasMax <= 0) _wasMax = 5;
 

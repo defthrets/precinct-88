@@ -42,6 +42,9 @@ namespace Precinct88.Streets
         /// <summary>And how long during a response, when the beat rhythm is the wrong one.</summary>
         private const int SurgeGapMs = 3500;
 
+        /// <summary>How far back a unit stops from something it is not going into.</summary>
+        private const float StandOffRange = 62f;
+
         /// <summary>How long a unit sits somewhere watching a street.</summary>
         private const int SitMinMs = 16000;
         private const int SitMaxMs = 46000;
@@ -95,6 +98,15 @@ namespace Precinct88.Streets
         /// <summary>Where a surged unit heads the moment it exists.</summary>
         public Vector3 SurgeTo;
 
+        /// <summary>Until when units are put out as fast as they can be placed.</summary>
+        private int _scrambleUntil;
+
+        /// <summary>How long a scramble keeps running before it is an ordinary surge again.</summary>
+        private const int ScrambleMs = 40000;
+
+        /// <summary>And how fast cars go out while one is on. Nothing like a beat.</summary>
+        private const int ScrambleGapMs = 1100;
+
         public bool Surging => Surge > 0;
 
         public Fleet(Settings cfg)
@@ -124,21 +136,162 @@ namespace Precinct88.Streets
 
             Sweep(at, now);
 
-            // NOTHING NEW GOES OUT WHILE THE LAW IS HELD, and this one line is most of how the
-            // other mod gets what it needs without a single call. Hoodrich holds the law for a
-            // gang war, a bike ride, a raid -- and a beat car easing round the corner into a
-            // firefight it was not sent to is two officers walking into somebody else's scene.
+            // A HELD LAW MEANS THEY DO NOT GO IN. It does not mean they are not there.
             //
-            // Cars already out are left where they are. They are not deleted, because a squad
-            // car vanishing off the street the moment a war starts is more conspicuous than one
-            // driving through it.
-            if (Response.LawHold.Held) return;
+            // Hoodrich holds the law for a gang war, a bike ride, a raid, and a beat car easing
+            // round the corner into a firefight it was not sent to is two officers walking into
+            // somebody else's scene. That much was right. But it produced an EMPTY STREET during
+            // a gunfight, which is its own kind of wrong -- and a police force that responds to
+            // nothing while shooting is audible three blocks away is more conspicuous than one
+            // that turns up.
+            //
+            // So a couple of them come and stop at the edge, and nothing else happens.
+            if (Response.LawHold.Held)
+            {
+                StandOff(at, now);
+                return;
+            }
+
+            Rejoin(now);
 
             if (Busy != null && Busy()) return;
 
             Steer(at, now);
 
             if (now >= _nextSpawn && _out.Count < Wanted(at)) TryPutOneOut(at, now);
+        }
+
+        /// <summary>
+        /// EVERYTHING, NOW.
+        ///
+        /// For the one call that is not proportionate to anything. An officer down is the
+        /// moment the finite-force argument stops being interesting: nobody wants a considered
+        /// response about how far away the nearest car happened to be, and every unit on the
+        /// map turning towards it is the correct behaviour rather than a concession.
+        ///
+        /// Two things happen that an ordinary surge does not do. Every free unit is redirected
+        /// AT ONCE rather than one every nine seconds, and the spawn cadence drops to about a
+        /// second so the ones that have to be placed arrive in a stream instead of a trickle.
+        /// They still drive. That part never changes.
+        /// </summary>
+        public void Scramble(Vector3 to)
+        {
+            var now = Game.GameTime;
+
+            _scrambleUntil = now + ScrambleMs;
+            _nextSpawn = 0;
+
+            SurgeTo = to;
+
+            var sent = 0;
+
+            foreach (var unit in _out)
+            {
+                if (!unit.Alive) continue;
+                if (unit.Doing == Duty.Contact || unit.Doing == Duty.StandingOff) continue;
+                if (unit.Doing == Duty.Responding) continue;
+
+                unit.RespondTo(to, "officer down");
+                sent++;
+            }
+
+            Log.Info("Scramble: " + sent + " unit(s) turned round, spawning hard for " +
+                     (ScrambleMs / 1000) + "s.");
+        }
+
+        /// <summary>Whether everything is being thrown at something right now.</summary>
+        public bool Scrambling => Game.GameTime < _scrambleUntil;
+
+        /// <summary>
+        /// Sends a couple to the edge of whatever is being held, and no further.
+        ///
+        /// They watch. They do not intervene, they do not shoot, and they do not drive into it
+        /// -- see Unit.StandOff, where blocking permanent events is what stops the combat system
+        /// making that decision for them.
+        /// </summary>
+        private void StandOff(Vector3 playerAt, int now)
+        {
+            if (_cfg.OnlookerUnits <= 0) return;
+
+            var scene = Response.LawHold.HeldAt;
+            if (scene == Vector3.Zero) scene = playerAt;
+
+            var watching = 0;
+
+            foreach (var unit in _out)
+            {
+                if (unit.Doing == Duty.StandingOff) watching++;
+            }
+
+            // Anything already out gets used first. A car that is a street away is a much
+            // better onlooker than one conjured for the purpose, which is the same argument the
+            // whole Fleet is built on.
+            if (watching < _cfg.OnlookerUnits)
+            {
+                foreach (var unit in _out)
+                {
+                    if (watching >= _cfg.OnlookerUnits) break;
+
+                    if (!unit.Alive) continue;
+                    if (unit.Doing == Duty.StandingOff || unit.Doing == Duty.Contact) continue;
+
+                    unit.StandOff(Edge(scene));
+                    watching++;
+                }
+            }
+
+            if (watching >= _cfg.OnlookerUnits) return;
+            if (now < _nextSpawn) return;
+
+            // Still short. One is put out at the edge, well back from it.
+            _nextSpawn = now + 6000;
+
+            var beat = Districts.At(scene);
+
+            Vector3 spot;
+            float heading;
+            if (!SpawnPoint(playerAt, beat, out spot, out heading)) return;
+
+            var unitOut = Make(spot, heading, beat, now);
+            if (unitOut == null) return;
+
+            _out.Add(unitOut);
+            unitOut.StandOff(Edge(scene));
+
+            Log.Debug("Unit standing off a held scene (" + (watching + 1) + " watching).");
+        }
+
+        /// <summary>
+        /// A spot on the road at arm's length from something.
+        ///
+        /// Far enough back to read as a cordon rather than as involvement, and snapped to a
+        /// real road node so they park on tarmac instead of in somebody's front garden.
+        /// </summary>
+        private Vector3 Edge(Vector3 scene)
+        {
+            var angle = _rng.NextDouble() * Math.PI * 2d;
+
+            var guess = scene + new Vector3((float)Math.Cos(angle) * StandOffRange,
+                                            (float)Math.Sin(angle) * StandOffRange, 0f);
+
+            Vector3 road;
+            float heading;
+
+            return Stations.RoadBy(guess, out road, out heading) ? road : guess;
+        }
+
+        /// <summary>Puts anybody who was standing off back to work once the hold lifts.</summary>
+        private void Rejoin(int now)
+        {
+            foreach (var unit in _out)
+            {
+                if (unit.Doing != Duty.StandingOff) continue;
+                if (!unit.Alive) continue;
+
+                unit.BackOnDuty();
+                unit.Doing = Duty.Sitting;
+                unit.MoveOnAt = now + 3000;
+            }
         }
 
         /// <summary>
@@ -195,6 +348,10 @@ namespace Precinct88.Streets
             foreach (var unit in _out)
             {
                 if (unit.Doing == Duty.Contact) continue;
+
+                // Somebody else is driving these, and it is the hold. Steering them would send
+                // them back onto a beat through the middle of whatever they are standing off.
+                if (unit.Doing == Duty.StandingOff) continue;
 
                 switch (unit.Doing)
                 {
@@ -301,9 +458,11 @@ namespace Precinct88.Streets
             // A SURGE CANNOT WAIT SEVENTY SECONDS FOR THE NEXT CAR. The ordinary gap is the
             // rhythm of a beat, which is exactly wrong for a response -- with the engine's
             // dispatch off, a slow gap here is a five-star manhunt where nobody turns up.
-            _nextSpawn = Surging
-                ? now + SurgeGapMs + _rng.Next(SurgeGapMs)
-                : now + GapMinMs + _rng.Next(GapMaxMs - GapMinMs);
+            _nextSpawn = Scrambling
+                ? now + ScrambleGapMs
+                : Surging
+                    ? now + SurgeGapMs + _rng.Next(SurgeGapMs)
+                    : now + GapMinMs + _rng.Next(GapMaxMs - GapMinMs);
 
             var beat = Districts.At(playerAt);
             if (beat.Density <= 0f) return;
@@ -343,7 +502,7 @@ namespace Precinct88.Streets
             _out.Add(unit);
             unit.Beat = beat;
 
-            if (Surging && SurgeTo != Vector3.Zero)
+            if ((Surging || Scrambling) && SurgeTo != Vector3.Zero)
             {
                 // Straight to the call. It was not on a beat and never pretended to be -- this
                 // is a unit answering something, which is what a response is.

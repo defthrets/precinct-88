@@ -83,6 +83,42 @@ namespace Precinct88.UI
         }
 
         /// <summary>
+        /// The same, for art that is not square.
+        ///
+        /// Every icon in the set IS square, so Icon forces one and that is right for all of
+        /// them. A road sign is two-thirds as wide as it is tall, and squeezed into a square it
+        /// stops being a sign.
+        /// </summary>
+        public static bool Picture(string file, float centreX, float centreY,
+                                   float width, float height, Color tint)
+        {
+            var sprite = Load(file);
+            if (sprite == null) return false;
+
+            try
+            {
+                var wide = width * GTA.UI.Screen.ScaledWidth;
+                var tall = height * ScaledHeight;
+
+                if (wide < 1f || tall < 1f) return false;
+
+                sprite.Size = new SizeF(wide, tall);
+                sprite.Position = new PointF(centreX * GTA.UI.Screen.ScaledWidth,
+                                             centreY * ScaledHeight);
+                sprite.Color = tint;
+                sprite.Rotation = 0f;
+
+                sprite.ScaledDraw();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Picture '" + file + "' would not draw: " + ex.Message);
+                return false;
+            }
+        }
+
+        /// <summary>
         /// The sprite for a file, made once.
         ///
         /// Cached because constructing one LOADS THE TEXTURE, and a texture loaded every frame

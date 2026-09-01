@@ -91,6 +91,18 @@ namespace Precinct88.Core
         public bool OwnDispatch = true;
 
         /// <summary>
+        /// How many units stop at the edge of something the law is being held off for.
+        ///
+        /// A gang war holds the police off, which is right -- it is not a police matter and
+        /// nothing this mod does should turn it into one. But that produced an empty street
+        /// during a firefight, and a force that responds to nothing while shooting is audible
+        /// three blocks away is more conspicuous than one that turns up and waits.
+        ///
+        /// They watch. They do not go in. 0 switches it off entirely.
+        /// </summary>
+        public int OnlookerUnits = 2;
+
+        /// <summary>
         /// What is left behind after the police shoot somebody.
         ///
         /// An ambulance, a paramedic knelt over him, then a coned-off scene that stands for
@@ -404,6 +416,8 @@ namespace Precinct88.Core
                 s.FromStations = ini.GetBool("Patrol", "FromStations", s.FromStations);
                 s.OwnDispatch = ini.GetBool("Patrol", "OwnDispatch", s.OwnDispatch);
                 s.DispatchFailsafe = ini.GetBool("Patrol", "DispatchFailsafe", s.DispatchFailsafe);
+                s.OnlookerUnits = (int)Clamp(ini.GetInt("Patrol", "OnlookerUnits",
+                                                         s.OnlookerUnits), 0f, 6f);
                 s.CrimeScenes = ini.GetBool("Patrol", "CrimeScenes", s.CrimeScenes);
                 s.CrimeSceneMinutes = Clamp(ini.GetFloat("Patrol", "CrimeSceneMinutes",
                                                          s.CrimeSceneMinutes), 0.5f, 30f);

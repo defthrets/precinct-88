@@ -67,8 +67,14 @@ namespace Precinct88.Response
         /// </summary>
         private const int LostAfterMs = 2200;
 
-        /// <summary>How often a unit is sent somewhere new inside the search area.</summary>
+        /// <summary>
+        /// How often a unit is sent somewhere new inside the search area.
+        ///
+        /// Much shorter when it is serious. Nine seconds between one car being redirected and
+        /// the next is a search; on an officer down it is a queue.
+        /// </summary>
         private const int RedirectMs = 9000;
+        private const int UrgentRedirectMs = 2500;
 
         private readonly Settings _cfg;
         private readonly Fleet _fleet;
@@ -89,6 +95,22 @@ namespace Precinct88.Response
         private Offence _worstWhat;
 
         private int _lastSeenAt;
+
+        /// <summary>
+        /// Where it was first called in. This never moves for the whole incident.
+        ///
+        /// THE SEARCH CENTRE IS NOT THE SAME THING and conflating them was wrong. _searchFrom
+        /// tracks the player while anybody can see him and freezes wherever they lost him,
+        /// which is right for a chase already in progress -- but it meant a unit dispatched
+        /// thirty seconds in was sent to wherever the player currently was, and drove straight
+        /// past the street the crime had actually happened on.
+        ///
+        /// Police go to the ADDRESS. That is what a call is. They look at the scene, and only
+        /// then do they work outwards from it -- which is the behaviour every other part of
+        /// this mod already assumed was happening.
+        /// </summary>
+        private Vector3 _origin;
+
         private Vector3 _searchFrom;
         private float _searchRadius;
         private int _searchStarted;
@@ -113,6 +135,9 @@ namespace Precinct88.Response
 
         /// <summary>How long after a hold lifts before a star counts as new rather than left over.</summary>
         private const int HoldResidueMs = 6000;
+
+        /// <summary>How long units work the scene itself before widening out from it.</summary>
+        private const int FirstSweepMs = 30000;
 
         /// <summary>
         /// Until when the player is being left alone.
@@ -226,6 +251,16 @@ namespace Precinct88.Response
 
             if (what == Offence.Homicide || what == Offence.OfficerDown) _bloody = true;
 
+            // THE ONE CALL THAT IS NOT PROPORTIONATE TO ANYTHING. Everything else in this mod
+            // is deliberately measured -- the nearest free car, two on a call at a time, a
+            // response that takes as long as the drive takes. An officer down is where that
+            // stops being the right instinct: every unit on the map turns towards it at once
+            // and cars go out as fast as they can be placed.
+            if (what == Offence.OfficerDown && _fleet != null)
+            {
+                _fleet.Scramble(where);
+            }
+
             // The WORST thing on the incident sticks, and nothing downgrades it. Shooting
             // somebody and then getting reported for loitering does not turn a homicide back
             // into a two-star affair.
@@ -249,6 +284,9 @@ namespace Precinct88.Response
                 // them he is a member of the public.
                 _radio.Note(me, got);
                 _radio.Seen(where);
+
+                // The address. Fixed for the whole incident -- see _origin.
+                _origin = where;
 
                 _searchFrom = where;
                 _searchRadius = 45f;
@@ -362,6 +400,7 @@ namespace Precinct88.Response
             _heat = 0f;
             _worst = null;
             _searchRadius = 0f;
+            _origin = Vector3.Zero;
             State = Hunt.Clear;
 
             _radio.Clear();
@@ -654,7 +693,9 @@ namespace Precinct88.Response
                 return;
             }
 
-            if (now - _lastRedirect < RedirectMs) return;
+            var gap = _worst != null && _worst.Ceiling >= 5 ? UrgentRedirectMs : RedirectMs;
+
+            if (now - _lastRedirect < gap) return;
             _lastRedirect = now;
 
             SendSomebody();
@@ -675,19 +716,32 @@ namespace Precinct88.Response
         {
             if (_fleet == null) return;
 
-            // Two on a call at once, at most. More than that and the pool empties, the beat
+            // HOW MANY MAY BE ON IT AT ONCE, and it is not a constant.
+            //
+            // Two is right for almost everything: more than that empties the pool, the beat
             // stops existing, and every street in the district goes silent for the duration --
-            // which is the opposite of what a manhunt should feel like.
-            if (_fleet.OnCalls() >= 2) return;
+            // the opposite of what a manhunt should feel like. But an officer down is not
+            // almost everything, and holding it to two there is the mod being tidy at exactly
+            // the wrong moment.
+            var most = _worst != null && _worst.Ceiling >= 5 ? 6 : 2;
+
+            if (_fleet.OnCalls() >= most) return;
 
             var unit = _fleet.NearestFree(_searchFrom, _searchRadius + 400f);
             if (unit == null) return;
 
-            var angle = _rng.NextDouble() * Math.PI * 2d;
-            var reach = _searchRadius * (0.35f + (float)_rng.NextDouble() * 0.6f);
+            // THE SCENE FIRST, then outwards. For the first half-minute the search is around
+            // the address it was called in at, because that is where anybody would start; after
+            // that it follows wherever they last actually had him.
+            var young = Game.GameTime - _searchStarted < FirstSweepMs;
 
-            var guess = _searchFrom + new Vector3((float)Math.Cos(angle) * reach,
-                                                  (float)Math.Sin(angle) * reach, 0f);
+            var about = young && _origin != Vector3.Zero ? _origin : _searchFrom;
+
+            var angle = _rng.NextDouble() * Math.PI * 2d;
+            var reach = (young ? 40f : _searchRadius) * (0.35f + (float)_rng.NextDouble() * 0.6f);
+
+            var guess = about + new Vector3((float)Math.Cos(angle) * reach,
+                                            (float)Math.Sin(angle) * reach, 0f);
 
             Vector3 road;
             float heading;
@@ -813,7 +867,12 @@ namespace Precinct88.Response
             if (_fleet != null)
             {
                 _fleet.Surge = Surge();
-                _fleet.SurgeTo = _searchFrom;
+
+                // NEW UNITS GO TO THE SCENE, not to wherever he is now. A car that has just
+                // been dispatched has been told an address and nothing else; it drives there,
+                // looks, and joins the search from there. Only once somebody actually has eyes
+                // on him is there anywhere better to send one.
+                _fleet.SurgeTo = State == Hunt.Seen ? _searchFrom : _origin;
             }
 
             Answered();

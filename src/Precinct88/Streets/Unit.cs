@@ -26,7 +26,17 @@ namespace Precinct88.Streets
         Contact,
 
         /// <summary>Round finished. Driving off to be let go somewhere off screen.</summary>
-        StandingDown
+        StandingDown,
+
+        /// <summary>
+        /// Parked at the edge of something that is not theirs to go into.
+        ///
+        /// A gang war holds the law off, which is correct -- it is not a police matter and
+        /// nothing this mod does should turn it into one. But "not a police matter" produced an
+        /// empty street, and an empty street during a firefight is its own kind of wrong. These
+        /// units stop at the edge, put the bar on, and watch.
+        /// </summary>
+        StandingOff,
     }
 
     /// <summary>
@@ -191,6 +201,55 @@ namespace Precinct88.Streets
             Cops.Megaphone(Driver, "CHASE_SOLO");
         }
 
+        /// <summary>
+        /// Pull up at the edge of something and watch it.
+        ///
+        /// Lights on, no siren, engine running, and NOT going in. BlockPermanentEvents is the
+        /// load-bearing part: without it the crew see a firefight forty metres away and the
+        /// combat system takes them straight into it, which is the exact opposite of standing
+        /// off and would turn every gang war into a police battle.
+        /// </summary>
+        public void StandOff(Vector3 edge)
+        {
+            Doing = Duty.StandingOff;
+            Target = edge;
+            StopThere = true;
+            CallReason = "standing off";
+
+            Drive(edge, ResponseSpeed, CruiseStyle);
+            Light(Lamps.Watching);
+
+            try
+            {
+                foreach (var who in Everyone())
+                {
+                    who.BlockPermanentEvents = true;
+                    Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, who.Handle, 46, false);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Could not settle a standing-off unit: " + ex.Message);
+            }
+        }
+
+        /// <summary>Lets them behave normally again once whatever it was has finished.</summary>
+        public void BackOnDuty()
+        {
+            try
+            {
+                foreach (var who in Everyone())
+                {
+                    who.BlockPermanentEvents = false;
+                    Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, who.Handle, 46, true);
+                }
+            }
+            catch
+            {
+                // They go back to normal when re-tasked either way.
+            }
+        }
+
         /// <summary>Stop where you are and hold. The Contact system takes it from here.</summary>
         public void HandOver()
         {
@@ -282,6 +341,10 @@ namespace Precinct88.Streets
             // the route, do not decide the round is over -- a unit yanked out from under the
             // system that is mid-scene with it is a bug in the other file.
             if (Doing == Duty.Contact) return true;
+
+            // Standing off is a held position. Nothing here re-routes it, nothing declares it
+            // stuck for not moving -- not moving is the entire job.
+            if (Doing == Duty.StandingOff) return true;
 
             var now = Game.GameTime;
 
