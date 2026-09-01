@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using GTA;
+using Precinct88.Contact;
 using Precinct88.Core;
 using Precinct88.Response;
 using Precinct88.Streets;
@@ -23,10 +24,10 @@ namespace Precinct88
     /// and out of the build only because the build script globs src\Precinct88 and nothing
     /// else. Bringing a file back is a move and a wire, not a rewrite.
     ///
-    /// WHAT RUNS RIGHT NOW: cars and officers on patrol, their blips, their lights, and the
-    /// suppression that stops the game spawning its own police over the top of ours. No
-    /// wanted rework, no traffic stops, no arrests. The one question this build has to answer
-    /// is whether police move around the map in a way that looks right.
+    /// WHAT RUNS RIGHT NOW: cars and officers on patrol, their blips and lights, the
+    /// suppression that stops the game spawning police over the top of ours, officers noticing
+    /// crime and attending it, and traffic stops. No wanted rework, no arrests, no searches --
+    /// running from a stop hands a wanted level to the engine and lets it do the pursuit.
     ///
     /// ONE SCRIPT, NOT SEVEN, and that outlives the rebuild. SHVDN will happily run a Script
     /// subclass per system, but they are not independent about ORDER -- and with separate
@@ -43,6 +44,8 @@ namespace Precinct88
         private readonly Spotlight _beam;
         private readonly Notice _notice;
         private readonly Callout _callout;
+        private readonly Violations _violations;
+        private readonly TrafficStop _traffic;
 
         private bool _parked;
         private bool _standDown;
@@ -74,6 +77,8 @@ namespace Precinct88
                 _beam = new Spotlight(_cfg, _fleet);
                 _notice = new Notice(_cfg, _fleet, _foot);
                 _callout = new Callout(_cfg, _fleet);
+                _violations = new Violations(_cfg);
+                _traffic = new TrafficStop(_cfg, _fleet, _violations);
 
                 Wire();
 
@@ -86,6 +91,7 @@ namespace Precinct88
                          "Patrol " + OnOff(_cfg.PatrolEnabled) +
                          ", foot " + OnOff(_cfg.FootPatrols) +
                          ", response " + OnOff(_cfg.RespondToCrime) +
+                         ", stops " + OnOff(_cfg.ContactEnabled && _cfg.TrafficStops) +
                          ", blips " + OnOff(_cfg.PoliceBlips) +
                          ", suppression " + OnOff(_cfg.SuppressVanillaPatrols) + ".");
             }
@@ -108,10 +114,9 @@ namespace Precinct88
         /// </summary>
         private void Wire()
         {
-            // Patrol stops producing units while something else is running. Nothing else is
-            // running yet, so this is only the LSPDFR stand-down -- but the hook is the seam
-            // every system that gets ported back plugs into, so it stays.
-            _fleet.Busy = () => _standDown;
+            // Patrol stops producing units while something else is running -- a car easing
+            // round the corner into the middle of a stop is two scenes in one street.
+            _fleet.Busy = () => _standDown || _traffic.Running;
             _foot.Busy = () => _standDown;
 
             // What an officer saw goes to whoever decides who attends. Notice knows nothing
@@ -121,6 +126,7 @@ namespace Precinct88
 
             // The call talks; it does not draw.
             _callout.Say = Screen.Ticker;
+            _traffic.Say = Screen.Ticker;
         }
 
         /// <summary>
@@ -168,20 +174,30 @@ namespace Precinct88
                 //    survivable and at a bad frame rate is not.
                 _callout.Update();
 
-                // 3. THE CARS. Everything else in this build is a consequence of where they
+                // 3. HOW YOU ARE DRIVING, continuously, whether or not anybody is looking.
+                //    The detector runs on its own so a violation is noticed at the moment it
+                //    happens rather than at the moment an officer thinks to check.
+                _violations.Update();
+
+                // 4. The stop currently running, or whether one starts. BEFORE the fleet,
+                //    because it borrows a unit out of the pool and Fleet must not re-steer a
+                //    car on the same tick it was handed over.
+                _traffic.Update();
+
+                // 5. THE CARS. Everything else in this build is a consequence of where they
                 //    are, so they move next and the rest of the tick reads the result.
                 _fleet.Update();
 
-                // 4. Officers who are not in a car. Independent of the fleet -- they are
+                // 6. Officers who are not in a car. Independent of the fleet -- they are
                 //    placed by district, not spawned out of it -- but after it because a
                 //    walker and a car in the same street should be the car's street.
                 _foot.Update();
 
-                // 5. After both, so a unit that has just gone out is marked on the same tick
+                // 7. After both, so a unit that has just gone out is marked on the same tick
                 //    it exists rather than a second later.
                 _markers.Update();
 
-                // 6. The vanilla generator, held off every tick because the game keeps
+                // 8. The vanilla generator, held off every tick because the game keeps
                 //    switching it back on. See AmbientCops -- this is a lapse that looks
                 //    exactly like a mod that never worked.
                 if (_cfg.PatrolEnabled && _cfg.SuppressVanillaPatrols)
@@ -189,7 +205,7 @@ namespace Precinct88
                     AmbientCops.Hold(_cfg.OwnDispatch);
                 }
 
-                // 7. EVERY FRAME, and that is the point of it being here rather than on a
+                // 9. EVERY FRAME, and that is the point of it being here rather than on a
                 //    tick of its own. The fleet ticks at 750ms and a light drawn at that rate
                 //    is a strobe.
                 if (_beam != null) _beam.Draw();
@@ -237,8 +253,13 @@ namespace Precinct88
         {
             try
             {
-                // Units off the call and back on patrol FIRST, so nothing is left driving
-                // to somewhere with its lights on while the rest of this runs.
+                // Scenes first, and the stop before the call. A stop holds a unit out of the
+                // pool entirely and an officer stood in the road with his events blocked; both
+                // have to be given back before anything else is torn down.
+                if (_traffic != null) _traffic.End("the mod is unloading", false);
+
+                // Units off the call and back on patrol, so nothing is left driving to
+                // somewhere with its lights on while the rest of this runs.
                 if (_callout != null) _callout.Clear("the mod is unloading");
 
                 // The generator back on before the cars go, so the streets are not empty of

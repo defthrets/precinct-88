@@ -109,9 +109,6 @@ namespace Precinct88.Contact
 
         private readonly Settings _cfg;
 
-        /// <summary>What is on the licence, for the one offence that depends on it.</summary>
-        private readonly Licence _licence;
-
         /// <summary>When each violation started being true. 0 when it is not.</summary>
         private readonly Dictionary<Violation, int> _since = new Dictionary<Violation, int>();
 
@@ -123,10 +120,9 @@ namespace Precinct88.Contact
 
         private int _lastTick;
 
-        public Violations(Settings cfg, Licence licence)
+        public Violations(Settings cfg)
         {
             _cfg = cfg;
-            _licence = licence;
         }
 
         /// <summary>Everything currently committed. Live list; do not hold it.</summary>
@@ -218,9 +214,15 @@ namespace Precinct88.Contact
 
             Instant(Violation.RedLight, RanTheLight(car, speed), now);
 
-            // Not a state of the car or of the driving. A state of YOU, and the only violation
-            // here that you cannot stop committing by driving better.
-            Instant(Violation.Disqualified, _licence != null && _licence.IsSuspended, now);
+            // DISQUALIFIED IS NOT CHECKED HERE YET, and the enum member is kept rather than
+            // deleted so that nothing downstream has to be rewritten when it comes back.
+            //
+            // It is the only violation that is a state of YOU rather than of the car or of the
+            // driving -- you cannot stop committing it by driving better -- and it needs
+            // Licence, which is still parked. Restore this line with Licence and nothing else
+            // in this file changes:
+            //
+            //     Instant(Violation.Disqualified, _licence != null && _licence.IsSuspended, now);
         }
 
         private bool Speeding(Vehicle car, float speed)
