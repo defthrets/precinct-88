@@ -193,6 +193,22 @@ namespace Precinct88.Core
         /// <summary>Being pulled over for how you are driving, or for what you are driving.</summary>
         public bool TrafficStops = true;
 
+        /// <summary>
+        /// The speed and limit readout while driving.
+        ///
+        /// On by default, and that is a FAIRNESS decision rather than an information one: the
+        /// moment speeding became something you get pulled over for, a limit you cannot see
+        /// stopped being a rule and became a trap. GTA V has no speed signs to read.
+        /// </summary>
+        public bool ShowSpeedLimit = true;
+
+        /// <summary>Kilometres per hour, or miles.</summary>
+        public bool SpeedInKph = true;
+
+        /// <summary>Where the readout sits. Nudge if another mod has taken the spot.</summary>
+        public float SpeedHudX = 0.5f;
+        public float SpeedHudY = 0.895f;
+
         /// <summary>Which kinds of vehicle the traffic laws are enforced on at all.</summary>
         public bool EnforceCars = true;
         public bool EnforceBikes = true;
@@ -300,6 +316,10 @@ namespace Precinct88.Core
                 s.EnforceCars = ini.GetBool("Contact", "EnforceCars", s.EnforceCars);
                 s.EnforceBikes = ini.GetBool("Contact", "EnforceBikes", s.EnforceBikes);
                 s.EnforceBicycles = ini.GetBool("Contact", "EnforceBicycles", s.EnforceBicycles);
+                s.ShowSpeedLimit = ini.GetBool("Contact", "ShowSpeedLimit", s.ShowSpeedLimit);
+                s.SpeedInKph = ini.GetBool("Contact", "SpeedInKph", s.SpeedInKph);
+                s.SpeedHudX = Clamp(ini.GetFloat("Contact", "SpeedHudX", s.SpeedHudX), 0f, 1f);
+                s.SpeedHudY = Clamp(ini.GetFloat("Contact", "SpeedHudY", s.SpeedHudY), 0f, 1f);
                 s.NoticeRange = Clamp(ini.GetFloat("Contact", "NoticeRange", s.NoticeRange), 5f, 120f);
                 s.StopCooldownSeconds = Clamp(ini.GetFloat("Contact", "StopCooldownSeconds",
                                                            s.StopCooldownSeconds), 5f, 600f);

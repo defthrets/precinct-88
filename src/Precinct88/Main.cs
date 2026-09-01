@@ -39,6 +39,7 @@ namespace Precinct88
         private readonly SettingsScreen _screen;
         private readonly Hud _hud;
         private readonly Spotlight _beam;
+        private readonly SpeedHud _speed;
 
         private bool _parked;
         private bool _standDown;
@@ -79,6 +80,7 @@ namespace Precinct88
                 _screen = new SettingsScreen(_cfg, _fleet, _hunt, () => Dispatch.Seizer != null);
                 _hud = new Hud(_cfg, _hunt, _stop, _booking, _surrender);
                 _beam = new Spotlight(_cfg, _fleet);
+                _speed = new SpeedHud(_cfg);
 
                 // The one thing in this mod that outlives a session.
                 if (_cfg.CriminalProfile) _hunt.Record.Load();
@@ -366,6 +368,7 @@ namespace Precinct88
                 // Drawn after the systems have run, so it shows this frame's answer rather
                 // than last frame's. Under the panel, which draws in the finally below.
                 if (_hud != null) _hud.Draw();
+                if (_speed != null) _speed.Draw();
 
                 // EVERY FRAME, and that is the point of it being here rather than on a tick.
                 // The fleet ticks at 750ms and a light drawn at that rate is a strobe.

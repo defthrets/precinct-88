@@ -304,6 +304,7 @@ if ($Package) {
         'scripts\Precinct88.dll',
         'scripts\Precinct88.ini',
         'scripts\Precinct88\stations.json',
+        'scripts\Precinct88\limits.json',
         'scripts\Precinct88\icons\seen.png',
         'scripts\Precinct88\icons\search.png',
         'scripts\Precinct88\icons

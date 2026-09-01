@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
 using GTA;
+using Precinct88.Contact;
 using Precinct88.Core;
 using Precinct88.Response;
 using Precinct88.Streets;
@@ -244,6 +245,14 @@ namespace Precinct88.UI
             Tick("Enforce on bicycles", "Contact", "EnforceBicycles",
                  () => _cfg.EnforceBicycles, v => _cfg.EnforceBicycles = v,
                  "Being pulled over on a BMX is funny exactly once");
+            Tick("Show speed and limit", "Contact", "ShowSpeedLimit",
+                 () => _cfg.ShowSpeedLimit, v => _cfg.ShowSpeedLimit = v,
+                 "A limit you cannot see is a trap, not a rule");
+            Tick("Use kilometres", "Contact", "SpeedInKph",
+                 () => _cfg.SpeedInKph, v => _cfg.SpeedInKph = v,
+                 "Off for miles per hour");
+            Slide("Readout height", "Contact", "SpeedHudY",
+                  () => _cfg.SpeedHudY, v => _cfg.SpeedHudY = v, 0f, 1f, 0.005f, "0.000");
             Slide("Notice range", "Contact", "NoticeRange",
                   () => _cfg.NoticeRange, v => _cfg.NoticeRange = v, 5f, 120f, 1f, "0", "m");
             Slide("Between stops", "Contact", "StopCooldownSeconds",
@@ -634,6 +643,12 @@ namespace Precinct88.UI
             }
 
             var surge = _fleet == null ? 0 : _fleet.Surge;
+
+            Screen.Text("limit here " +
+                        Limits.Signed(Limits.For(Game.Player.Character.Position),
+                                      _cfg.SpeedInKph) +
+                        (_cfg.SpeedInKph ? " kph" : " mph"),
+                        right, y, NoteScale, Faint, rightAligned: true);
 
             Screen.Text("units out " + units + "   on a call " + onCalls +
                         "   back streets " + backs +

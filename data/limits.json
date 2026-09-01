@@ -1,0 +1,28 @@
+{
+  "_comment": [
+    "Speed limit overrides, per zone, in KILOMETRES PER HOUR.",
+    "",
+    "This file is for EXCEPTIONS ONLY and ships nearly empty on purpose. Limits are normally",
+    "derived from two things the game already knows -- whether a road is on the arterial",
+    "network, and whether the district is policed by a city force -- which between them cover",
+    "the map without anybody hand-filling ninety-seven zones.",
+    "",
+    "A growing list here is a sign the derivation needs fixing rather than papering over. The",
+    "entries below are places where it is genuinely wrong: somewhere with tarmac wide enough to",
+    "read as a main road that nobody is meant to drive quickly on.",
+    "",
+    "Zone codes are the game's own, as GET_NAME_OF_ZONE returns them. See stations.json for the",
+    "same convention. An unknown code is ignored, so a typo costs that one entry."
+  ],
+
+  "zones": {
+    "AIRP": 40,
+    "TERMINA": 40,
+    "PBOX": 40,
+    "SKID": 40,
+    "VESP": 40,
+    "DELPE": 40,
+    "GOLF": 30,
+    "ELYSIAN": 60
+  }
+}
