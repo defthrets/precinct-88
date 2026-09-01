@@ -221,6 +221,23 @@ namespace Precinct88.Core
         public float SpeedHudY = 0.895f;
 
         /// <summary>
+        /// Whether a traffic stop can be more than a ticket.
+        ///
+        /// A pat down, or a dog walked round the car. The dog is the one that matters: it is
+        /// the only thing in the mod that removes the option to decline a search.
+        /// </summary>
+        public bool StopVariety = true;
+
+        /// <summary>
+        /// Blips on this mod's own police.
+        ///
+        /// Immersion-breaking and worth it while anything is being checked -- a quiet street
+        /// looks identical whether the beat is working perfectly or has produced nothing since
+        /// load, and this answers that at a glance. Colour says which force.
+        /// </summary>
+        public bool PoliceBlips = true;
+
+        /// <summary>
         /// Interest on unpaid fines, per GAME day.
         ///
         /// Per game day rather than per real minute, which is the only choice that reads as
@@ -364,6 +381,8 @@ namespace Precinct88.Core
                 s.EnforceCars = ini.GetBool("Contact", "EnforceCars", s.EnforceCars);
                 s.EnforceBikes = ini.GetBool("Contact", "EnforceBikes", s.EnforceBikes);
                 s.EnforceBicycles = ini.GetBool("Contact", "EnforceBicycles", s.EnforceBicycles);
+                s.StopVariety = ini.GetBool("Contact", "StopVariety", s.StopVariety);
+                s.PoliceBlips = ini.GetBool("Patrol", "PoliceBlips", s.PoliceBlips);
                 s.TicketInterest = Clamp(ini.GetFloat("Contact", "TicketInterest",
                                                       s.TicketInterest), 0f, 50f);
                 s.TicketBlips = ini.GetBool("Contact", "TicketBlips", s.TicketBlips);

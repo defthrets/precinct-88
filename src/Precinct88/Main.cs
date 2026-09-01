@@ -30,6 +30,7 @@ namespace Precinct88
 
         private readonly Fleet _fleet;
         private readonly Foot _foot;
+        private readonly Markers _markers;
         private readonly Manhunt _hunt;
         private readonly Witness _witness;
         private readonly Stop _stop;
@@ -72,6 +73,7 @@ namespace Precinct88
 
                 _fleet = new Fleet(_cfg);
                 _foot = new Foot(_cfg);
+                _markers = new Markers(_cfg, _fleet, _foot);
                 _hunt = new Manhunt(_cfg, _fleet);
                 _witness = new Witness(_cfg, _hunt);
                 _stop = new Stop(_cfg, _hunt);
@@ -391,6 +393,10 @@ namespace Precinct88
                 _fleet.Update();
                 _foot.Update();
 
+                // After both, so a unit that has just gone out is marked on the same tick it
+                // exists rather than a second later.
+                _markers.Update();
+
                 // The vanilla generator, held off every tick because the game keeps switching
                 // it back on. See AmbientCops -- this is a lapse that looks exactly like a mod
                 // that never worked.
@@ -460,6 +466,9 @@ namespace Precinct88
 
                 if (_fleet != null) _fleet.Release();
                 if (_foot != null) _foot.Release();
+
+                // Before the peds and cars go, or the blips outlive what they were attached to.
+                if (_markers != null) _markers.Clear();
 
                 // Last, and unconditional. Whatever went wrong above, the player gets the
                 // police back.

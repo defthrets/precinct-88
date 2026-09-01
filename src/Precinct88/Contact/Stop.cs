@@ -26,6 +26,27 @@ namespace Precinct88.Contact
         Suspicion,
     }
 
+    /// <summary>
+    /// What shape this stop takes.
+    ///
+    /// From "Ambient AI Police", which gives its stops three: a ticket, a pat down and then a
+    /// ticket, or a dog round the vehicle and then a ticket. Variety for its own sake would not
+    /// be worth the code -- what makes these worth having is that ONE OF THEM CHANGES WHAT THE
+    /// PLAYER CAN DO. A dog removes the option to politely decline the search, which is the only
+    /// thing in the mod that ever has.
+    /// </summary>
+    internal enum Shape
+    {
+        /// <summary>Licence, ticket, on your way. Most stops.</summary>
+        Ticket,
+
+        /// <summary>He wants to check you over first. The search, offered rather than waited for.</summary>
+        PatDown,
+
+        /// <summary>A dog walks the car. After that the search is not optional.</summary>
+        Dog,
+    }
+
     internal enum Beat
     {
         None,
@@ -141,6 +162,12 @@ namespace Precinct88.Contact
         /// <summary>When the siren goes off and leaves just the bar lit.</summary>
         private int _quietAt;
 
+        /// <summary>What shape this one is taking. Rolled at the start of a traffic stop.</summary>
+        private Shape _shape = Shape.Ticket;
+
+        /// <summary>The dog, if this is that kind of stop.</summary>
+        private readonly Dog _dog = new Dog();
+
         /// <summary>
         /// The car he was driving when this began.
         ///
@@ -233,6 +260,19 @@ namespace Precinct88.Contact
             var inCar = me != null && me.Exists() && me.IsInVehicle();
 
             _theirs = inCar ? me.CurrentVehicle : null;
+
+            // ONLY TRAFFIC STOPS GET A SHAPE. A man stopped on foot for carrying a gun is not
+            // getting a dog walked round him, and the pat down IS the stop in that case.
+            _shape = Shape.Ticket;
+
+            if (inCar && _cfg.StopVariety)
+            {
+                var roll = _rng.Next(100);
+
+                _shape = roll < 55 ? Shape.Ticket
+                       : roll < 82 ? Shape.PatDown
+                       : Shape.Dog;
+            }
 
             _at = inCar ? Beat.Pulling : Beat.Approaching;
 
@@ -452,6 +492,42 @@ namespace Precinct88.Contact
 
             if (WalkedAway(me)) { Ran(me, "walking away from a stop"); return; }
 
+            // THE DOG, if this is that kind of stop. Sent once he is stood at the window, and
+            // it walks the car while the conversation happens rather than instead of it.
+            if (_shape == Shape.Dog && !_dog.Out)
+            {
+                if (!_dog.Send(_officer, _theirs))
+                {
+                    // No dog on this install. An ordinary ticket, and nobody is any the wiser.
+                    _shape = Shape.Ticket;
+                }
+                else
+                {
+                    Screen.Said("Stay in the vehicle. I am walking the dog round it.");
+                }
+            }
+
+            if (_dog.Out)
+            {
+                _dog.Update(_theirs);
+
+                if (!_dog.Done)
+                {
+                    Screen.Help("The dog is working. Wait, or drive off.");
+                    return;
+                }
+
+                // IT HAS BEEN ROUND THE CAR. From here the search is not something you agree
+                // to -- which is the whole reason the dog is worth having.
+                Screen.Said("Out of the vehicle.");
+
+                Anim.Play(me, Anim.HandsUpDict, Anim.HandsUpClip, 49);
+
+                _searchDone = now + SearchMs;
+                Go(Beat.Searching, now);
+                return;
+            }
+
             // The offer, and it is a real one. Holding the key is the only thing in this scene
             // the player has to do, and not doing it is a choice with a consequence rather
             // than a fail state.
@@ -465,7 +541,11 @@ namespace Precinct88.Contact
             if (!_handsUp)
             {
                 Cops.Say(_officer, "COP_ARREST_PLAYER");
-                Screen.Said(Said(_why));
+
+                Screen.Said(_shape == Shape.PatDown
+                    ? Ticket() + " Step out, I am going to check you over."
+                    : Said(_why));
+
                 _handsUp = true;
             }
 
@@ -539,15 +619,28 @@ namespace Precinct88.Contact
             // released the button and quietly drops him back to the conversation.
             if (Occupied != null && Occupied()) return;
 
-            if (!Game.IsControlPressed(GTA.Control.Context))
+            // A DOG SEARCH IS NOT CONSENSUAL, and it is the one exception in the whole mod.
+            // Everywhere else letting go of the key walks you out of a search, deliberately --
+            // leaving is always available. Once the dog has been round the car it is not.
+            if (_shape != Shape.Dog)
             {
-                // Let go of the key mid-search. Not an escape, just back to the conversation.
-                Anim.Stop(me, Anim.HandsUpDict, Anim.HandsUpClip);
-                Go(Beat.Talking, now);
-                return;
-            }
+                if (!Game.IsControlPressed(GTA.Control.Context))
+                {
+                    // Let go mid-search. Not an escape, just back to the conversation.
+                    Anim.Stop(me, Anim.HandsUpDict, Anim.HandsUpClip);
+                    Go(Beat.Talking, now);
+                    return;
+                }
 
-            if (Occupied == null || !Occupied()) Screen.Help("Hold ~INPUT_CONTEXT~.   Let go to stop.");
+                if (Occupied == null || !Occupied())
+                {
+                    Screen.Help("Hold ~INPUT_CONTEXT~.   Let go to stop.");
+                }
+            }
+            else if (Occupied == null || !Occupied())
+            {
+                Screen.Help("Stand still.");
+            }
 
             Anim.Play(_officer, Anim.InspectDict, Anim.InspectClip, 1);
 
@@ -834,6 +927,8 @@ namespace Precinct88.Contact
             }
             catch { /* teardown */ }
 
+            _dog.Away();
+
             Loose(_officer);
 
             if (_unit != null && _unit.Alive)
@@ -864,6 +959,7 @@ namespace Precinct88.Contact
             }
 
             _at = Beat.None;
+            _shape = Shape.Ticket;
             _unit = null;
             _officer = null;
             _theirs = null;

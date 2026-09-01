@@ -98,6 +98,9 @@ namespace Precinct88.Streets
 
         public int Count => _out.Count;
 
+        /// <summary>Live list, for anything that wants to draw them. Do not hold it.</summary>
+        public IReadOnlyList<Walker> Walkers => _out;
+
         public void Update()
         {
             if (!_cfg.FootPatrols) return;

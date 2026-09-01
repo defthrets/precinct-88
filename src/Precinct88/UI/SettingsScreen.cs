@@ -191,6 +191,9 @@ namespace Precinct88.UI
                  "No car is ever created because of your stars. THE setting");
             Slide("Minutes on a beat", "Patrol", "BeatMinutes",
                   () => _cfg.BeatMinutes, v => _cfg.BeatMinutes = v, 1f, 60f, 1f, "0", "m");
+            Tick("Blips on our police", "Patrol", "PoliceBlips",
+                 () => _cfg.PoliceBlips, v => _cfg.PoliceBlips = v,
+                 "Colour is the force. Dot on a beat, car on a call");
             Tick("Foot patrols", "Patrol", "FootPatrols",
                  () => _cfg.FootPatrols, v => _cfg.FootPatrols = v,
                  "Town districts only. They notice what a crew in a car does");
@@ -257,6 +260,9 @@ namespace Precinct88.UI
             Tick("Enforce on bicycles", "Contact", "EnforceBicycles",
                  () => _cfg.EnforceBicycles, v => _cfg.EnforceBicycles = v,
                  "Being pulled over on a BMX is funny exactly once");
+            Tick("Pat downs and K-9", "Contact", "StopVariety",
+                 () => _cfg.StopVariety, v => _cfg.StopVariety = v,
+                 "A dog means the search is not optional");
             Slide("Fine interest a day", "Contact", "TicketInterest",
                   () => _cfg.TicketInterest, v => _cfg.TicketInterest = v, 0f, 25f, 0.5f, "0.0", "%",
                   note: "Per GAME day. Pay at any station front desk");
