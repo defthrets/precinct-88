@@ -61,14 +61,57 @@ namespace Precinct88.Streets
         private const int Swat = 4;
         private const int SwatHelicopter = 12;
 
+        /// <summary>The ordinary road police, which are what the failsafe hands back.</summary>
+        private const int RoadCar = 1;
+        private const int VehicleRequest = 7;
+        private const int WaitPulledOver = 9;
+        private const int WaitCruising = 10;
+
         private static int _lastPush;
         private static bool _suppressing;
 
         private static bool _allowAir;
         private static bool _allowSwat;
 
+        /// <summary>
+        /// Hands the engine's ordinary police dispatch back, temporarily.
+        ///
+        /// THE FAILSAFE THIS MOD SHOULD HAVE HAD FROM THE START. Switching off every dispatch
+        /// service makes the Fleet the entire police force, and that is the intended design --
+        /// right up until the Fleet cannot field anybody, at which point the player is at four
+        /// stars in a city with no police in it and the mod has simply broken the game.
+        ///
+        /// There is no version of this mod's argument that is worth that. If nobody has
+        /// answered a serious call for long enough, the engine is asked to help, and it keeps
+        /// helping until the incident is over.
+        /// </summary>
+        private static bool _fallback;
+
         /// <summary>Whether the engine's police are currently held off.</summary>
         public static bool Suppressed => _suppressing;
+
+        /// <summary>Whether the engine is currently being asked to help.</summary>
+        public static bool FallingBack => _fallback;
+
+        /// <summary>
+        /// Asks the engine for help, or stops asking.
+        ///
+        /// Called by Manhunt when its own units have failed to answer a serious call. Pushed
+        /// immediately rather than on the next beat, because the whole point is that the player
+        /// has already been waiting.
+        /// </summary>
+        public static void Fallback(bool on)
+        {
+            if (on == _fallback) return;
+
+            _fallback = on;
+            _lastPush = 0;
+
+            Log.Warn(on
+                ? "No unit of ours could answer. Handing ordinary police dispatch back to the " +
+                  "game for this incident."
+                : "Taking dispatch back off the game.");
+        }
 
         /// <summary>What the current incident justifies. Set by Manhunt, read on the next push.</summary>
         public static void Allow(bool air, bool swat)
@@ -108,6 +151,7 @@ namespace Precinct88.Streets
             _suppressing = false;
             _allowAir = false;
             _allowSwat = false;
+            _fallback = false;
 
             Push(true, true);
 
@@ -144,6 +188,16 @@ namespace Precinct88.Streets
                     {
                         if (service == Helicopter) on = _allowAir;
                         else if (service == Swat || service == SwatHelicopter) on = _allowSwat;
+
+                        // The ordinary road units, and only those, when nothing of ours could
+                        // get there. Not the helicopter and not SWAT -- those are still gated
+                        // on what was actually done, and a failsafe should restore policing
+                        // rather than escalate it.
+                        else if (_fallback && (service == RoadCar || service == VehicleRequest ||
+                                               service == WaitPulledOver || service == WaitCruising))
+                        {
+                            on = true;
+                        }
                     }
 
                     Function.Call(Hash.ENABLE_DISPATCH_SERVICE, service, on);
@@ -152,7 +206,8 @@ namespace Precinct88.Streets
                 // AND THE ONE THAT IS NOT A SERVICE. Even with every service off the engine will
                 // still decide the player warrants police attention through its own cop-request
                 // path; this is the switch for that, and without it a few still arrive.
-                Function.Call(Hash.SET_DISPATCH_COPS_FOR_PLAYER, Game.Player.Handle, allow);
+                Function.Call(Hash.SET_DISPATCH_COPS_FOR_PLAYER, Game.Player.Handle,
+                              allow || _fallback);
             }
             catch (Exception ex)
             {

@@ -112,6 +112,26 @@ namespace Precinct88.Response
         }
 
         /// <summary>
+        /// Taken in for it.
+        ///
+        /// A long way down rather than to zero. This is not a charge on a licence -- it is how
+        /// violently you go about things, which is a fact about you rather than an accusation,
+        /// and a man who has killed forty people is not an unknown quantity again because he
+        /// spent a night in a cell. But being arrested IS the reckoning, and a profile that
+        /// ignored it would make the whole record feel like it was punishing you twice.
+        /// </summary>
+        public void Served()
+        {
+            if (_violence <= 0f) return;
+
+            var was = Word;
+
+            Violence -= 0.4f;
+
+            Log.Info("Profile after being booked: " + was + " to " + Word + ".");
+        }
+
+        /// <summary>
         /// An incident ended and nobody got hurt in it.
         ///
         /// Nelson's line about GTA VI is the design here almost word for word: commit a crime,

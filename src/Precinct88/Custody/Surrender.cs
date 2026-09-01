@@ -97,13 +97,17 @@ namespace Precinct88.Custody
             // panel disabling controls -- browsing the settings would hand you in.
             if (Occupied != null && Occupied()) { _heldSince = 0; return; }
 
-            // The key name spelled out, NOT a ~INPUT_...~ tag. Those expand game CONTROLS, and
-            // the surrender key is a keyboard key out of the ini -- so the tag would render as
-            // the literal text INPUT_X for anybody who did not change it and as something worse
-            // for anybody who did.
-            Screen.Help("Hold [" + _cfg.SurrenderKey + "] to give yourself up.");
+            // A CONTROL, NOT A KEYBOARD KEY, and the tag now works because of it.
+            //
+            // The old version read a raw Keys value, which meant it only ever worked on a
+            // keyboard and the prompt had to spell the letter out. A control is bound on both
+            // -- D-pad left on a pad, G on a keyboard by default -- and ~INPUT_...~ expands to
+            // whatever the player has actually got, which is the whole reason that tag exists.
+            // It only works in HELP text, which is exactly what this is.
+            Screen.Help("Hold ~INPUT_" + _cfg.SurrenderControl.ToString().ToUpperInvariant() +
+                        "~ to give yourself up.");
 
-            if (!Game.IsKeyPressed(_cfg.SurrenderKey)) { _heldSince = 0; return; }
+            if (!Game.IsControlPressed(_cfg.SurrenderControl)) { _heldSince = 0; return; }
 
             if (_heldSince == 0) { _heldSince = now; return; }
             if (now - _heldSince < HoldMs) return;

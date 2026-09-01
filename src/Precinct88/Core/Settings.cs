@@ -91,6 +91,18 @@ namespace Precinct88.Core
         public bool OwnDispatch = true;
 
         /// <summary>
+        /// What is left behind after the police shoot somebody.
+        ///
+        /// An ambulance, a paramedic knelt over him, then a coned-off scene that stands for
+        /// several minutes, then a van and two people who take him away. In vanilla the body
+        /// simply lies there until the engine streams it out.
+        /// </summary>
+        public bool CrimeScenes = true;
+
+        /// <summary>How long a scene stands before the coroner comes for him.</summary>
+        public float CrimeSceneMinutes = 5f;
+
+        /// <summary>
         /// Officers who are not in a car.
         ///
         /// Every other officer in the mod is inside a vehicle, which quietly meant a stop could
@@ -100,6 +112,20 @@ namespace Precinct88.Core
 
         /// <summary>How many walk a beat at once, before the district weighting.</summary>
         public int FootUnits = 2;
+
+        /// <summary>
+        /// Whether the engine is asked to help when nothing of ours reaches a serious call.
+        ///
+        /// OFF BY DEFAULT, and that is a design decision rather than caution. Police arriving
+        /// slowly is not a fault in this mod, it is the entire claim: a unit drives to you from
+        /// wherever it actually was, and sometimes that is a long way. Handing dispatch back to
+        /// the engine the moment that feels slow would replace the thing the mod exists to do
+        /// with the thing it exists to replace.
+        ///
+        /// It is here for the genuine failure -- five stars and literally nobody, anywhere,
+        /// which is a broken game rather than a slow one. If you never see that, leave it off.
+        /// </summary>
+        public bool DispatchFailsafe = false;
 
         /// <summary>Minutes before a unit has finished its round and goes home.</summary>
         public float BeatMinutes = 11f;
@@ -171,8 +197,16 @@ namespace Precinct88.Core
         /// </summary>
         public bool ShowKnownStrip = true;
 
-        /// <summary>How far down the screen the strip sits. Under the stars, wherever those are.</summary>
-        public float KnownStripY = 0.083f;
+        /// <summary>
+        /// Where the description strip sits: the right-hand edge of the row, and its height.
+        ///
+        /// Lined up under the wanted stars rather than jammed against the screen edge. The
+        /// stars sit inside the safe zone, which is a slider in the game's own display options,
+        /// so these are settings -- nudge them if your safe zone is not the default.
+        /// </summary>
+        public float KnownStripX = 0.9385f;
+
+        public float KnownStripY = 0.0655f;
 
         /// <summary>
         /// Cameras as a witness that is not a person.
@@ -322,8 +356,23 @@ namespace Precinct88.Core
         /// <summary>The fine, before the multiplier for what they booked you for.</summary>
         public int Fine = 750;
 
-        /// <summary>Key that gives up when they have you. Hold it.</summary>
-        public Keys SurrenderKey = Keys.X;
+        /// <summary>
+        /// Seconds of being left alone after walking out of a station.
+        ///
+        /// Released on the pavement beside the officers who stand outside every station, with
+        /// nothing stopping the engine handing out a star and them opening fire on somebody
+        /// they had just let go. Long enough to walk away from the door and no longer.
+        /// </summary>
+        public float ReleaseGraceSeconds = 45f;
+
+        /// <summary>
+        /// What you hold to give yourself up.
+        ///
+        /// A CONTROL rather than a keyboard key, so it works on a pad as well and the on-screen
+        /// prompt can show whatever the player actually has bound. Detonate is D-pad left on a
+        /// controller and G on a keyboard, and is free in ordinary play.
+        /// </summary>
+        public GTA.Control SurrenderControl = GTA.Control.Detonate;
 
         // ---- loading -----------------------------------------------------------
 
@@ -354,6 +403,10 @@ namespace Precinct88.Core
                 s.BeatMinutes = Clamp(ini.GetFloat("Patrol", "BeatMinutes", s.BeatMinutes), 1f, 60f);
                 s.FromStations = ini.GetBool("Patrol", "FromStations", s.FromStations);
                 s.OwnDispatch = ini.GetBool("Patrol", "OwnDispatch", s.OwnDispatch);
+                s.DispatchFailsafe = ini.GetBool("Patrol", "DispatchFailsafe", s.DispatchFailsafe);
+                s.CrimeScenes = ini.GetBool("Patrol", "CrimeScenes", s.CrimeScenes);
+                s.CrimeSceneMinutes = Clamp(ini.GetFloat("Patrol", "CrimeSceneMinutes",
+                                                         s.CrimeSceneMinutes), 0.5f, 30f);
                 s.FootPatrols = ini.GetBool("Patrol", "FootPatrols", s.FootPatrols);
                 s.FootUnits = (int)Clamp(ini.GetInt("Patrol", "FootUnits", s.FootUnits), 0f, 8f);
                 s.AlleyPatrol = Clamp(ini.GetFloat("Patrol", "AlleyPatrol", s.AlleyPatrol), 0f, 2f);
@@ -370,6 +423,7 @@ namespace Precinct88.Core
                                                        s.LoseThemSeconds), 5f, 300f);
                 s.MaxStars = (int)Clamp(ini.GetInt("Wanted", "MaxStars", s.MaxStars), 1f, 5f);
                 s.ShowKnownStrip = ini.GetBool("Wanted", "ShowKnownStrip", s.ShowKnownStrip);
+                s.KnownStripX = Clamp(ini.GetFloat("Wanted", "KnownStripX", s.KnownStripX), 0f, 1f);
                 s.KnownStripY = Clamp(ini.GetFloat("Wanted", "KnownStripY", s.KnownStripY), 0f, 0.9f);
                 s.CamerasWatch = ini.GetBool("Wanted", "CamerasWatch", s.CamerasWatch);
                 s.CriminalProfile = ini.GetBool("Wanted", "CriminalProfile", s.CriminalProfile);
@@ -405,8 +459,10 @@ namespace Precinct88.Core
                 s.ConfiscateContraband = ini.GetBool("Custody", "ConfiscateContraband",
                                                      s.ConfiscateContraband);
                 s.Fine = (int)Clamp(ini.GetInt("Custody", "Fine", s.Fine), 0f, 1000000f);
+                s.ReleaseGraceSeconds = Clamp(ini.GetFloat("Custody", "ReleaseGraceSeconds",
+                                                           s.ReleaseGraceSeconds), 0f, 300f);
 
-                s.SurrenderKey = ini.GetKey("Custody", "SurrenderKey", s.SurrenderKey);
+                s.SurrenderControl = ini.GetEnum("Custody", "SurrenderControl", s.SurrenderControl);
             }
             catch (Exception ex)
             {

@@ -32,6 +32,16 @@ namespace Precinct88.Response
 
         private static int _wasMax = 5;
 
+        /// <summary>
+        /// When the last hold came off.
+        ///
+        /// A star sitting there the moment a hold lifts is RESIDUE from whatever was being held
+        /// -- a gang war leaves bodies all over a street, and the engine notices the instant it
+        /// is allowed to. Adopting that as a fresh crime is how a war ended with the player
+        /// being announced for loitering.
+        /// </summary>
+        public static int ReleasedAt { get; private set; }
+
         /// <summary>Whether anybody is currently holding the police off.</summary>
         public static bool Held => Holders.Count > 0;
 
@@ -168,6 +178,8 @@ namespace Precinct88.Response
 
         private static void Restore()
         {
+            ReleasedAt = Game.GameTime;
+
             try
             {
                 Function.Call(Hash.SET_MAX_WANTED_LEVEL, _wasMax);

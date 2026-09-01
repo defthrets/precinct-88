@@ -39,6 +39,19 @@ namespace Precinct88.Response
 
         /// <summary>An officer. Not the same thing as a body, and the response is not either.</summary>
         OfficerDown,
+
+        /// <summary>
+        /// Something the engine flagged that this mod cannot identify.
+        ///
+        /// THE MOD SHOULD NOT INVENT A CHARGE IT DOES NOT HAVE. Adopted wanted levels used to
+        /// fall through to Loitering at one star, so the radio announced "loitering" over a
+        /// gang war -- a specific, faintly absurd accusation for something the mod had no
+        /// information about at all.
+        ///
+        /// A disturbance is what a dispatcher says when the call is real and the detail is not
+        /// there yet, which is exactly the situation.
+        /// </summary>
+        Disturbance,
     }
 
     /// <summary>
@@ -94,6 +107,12 @@ namespace Precinct88.Response
             // A word, and that is all it is ever worth. One star, no guns, and it goes away.
             { Offence.Loitering,
               new Weight("loitering", 1, 0.6f, false, false, false) },
+
+            // Deliberately vague, because the mod genuinely does not know. Two stars of room,
+            // so adopting one of the engine's own levels does not immediately cap it lower than
+            // the engine had it and start a fight over the star count.
+            { Offence.Disturbance,
+              new Weight("a disturbance", 2, 1.0f, false, false, false) },
 
             // The one thing that always stops a car, and still not a shooting.
             { Offence.Brandishing,

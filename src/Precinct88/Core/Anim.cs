@@ -67,6 +67,20 @@ namespace Precinct88.Core
             try
             {
                 if (!Cops.Alive(who)) return false;
+
+                // ALREADY PLAYING IS NOT A REASON TO PLAY IT AGAIN, and this one line is the
+                // whole of the surrender twitch.
+                //
+                // Every caller of this sits in a per-tick loop and calls it unconditionally --
+                // hands up, cuffed, the officer's inspect idle. TASK_PLAY_ANIM does not check
+                // whether the clip is running; it RESTARTS it. So the pose was being restarted
+                // ten times a second and the ped juddered on the spot, which reads as the
+                // animation being broken rather than as the mod re-issuing it.
+                //
+                // Cheap to ask, and it makes "call it every tick" the correct way to hold a
+                // pose -- which is what every call site already assumed it was.
+                if (IsPlaying(who, dict, clip)) return true;
+
                 if (!Ready(dict)) return false;
 
                 Function.Call(Hash.TASK_PLAY_ANIM, who.Handle, dict, clip,
@@ -77,6 +91,29 @@ namespace Precinct88.Core
             catch (Exception ex)
             {
                 Log.Debug("Could not play " + dict + "/" + clip + ": " + ex.Message);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Whether this ped is already running this exact clip.
+        ///
+        /// Task flag 3 covers both the ordinary and the secondary task slots, which is what
+        /// upper-body clips like hands-up actually run in.
+        /// </summary>
+        public static bool IsPlaying(Ped who, string dict, string clip)
+        {
+            try
+            {
+                if (!Cops.Alive(who)) return false;
+
+                return Function.Call<bool>(Hash.IS_ENTITY_PLAYING_ANIM,
+                                           who.Handle, dict, clip, 3);
+            }
+            catch
+            {
+                // Cannot tell, so let it be re-issued. A twitch is better than a pose that
+                // never starts.
                 return false;
             }
         }

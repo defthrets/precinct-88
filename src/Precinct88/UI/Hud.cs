@@ -33,14 +33,25 @@ namespace Precinct88.UI
     /// </summary>
     internal sealed class Hud
     {
-        /// <summary>Right-hand edge. Under the stars, which sit top-right in GTA V.</summary>
-        private const float Right = 0.9855f;
+        /// <summary>
+        /// Where the row sits, as the RIGHT-HAND edge of it.
+        ///
+        /// The wanted stars are top right, inside the safe zone rather than against the screen
+        /// edge -- so a strip pinned at 0.9855 sat well outside them and read as a separate
+        /// thing floating in the corner. This lines its right edge up with theirs and puts it
+        /// directly underneath, so it reads as a second row of the same HUD element.
+        ///
+        /// Both numbers are settings, because safe zone is a slider in the game's own display
+        /// options and no single default can be right for everybody.
+        /// </summary>
+        private float Right => _cfg.KnownStripX;
 
-        private const float IconH = 0.030f;
-        private const float Gap = 0.0075f;
+        /// <summary>Sized to the stars rather than to nothing. They are about this tall.</summary>
+        private const float IconH = 0.0265f;
+        private const float Gap = 0.0055f;
 
         /// <summary>The state icon leads and is a size up, because it is the headline.</summary>
-        private const float StateH = 0.038f;
+        private const float StateH = 0.0335f;
 
         /// <summary>How long a newly-gained icon stays lit up.</summary>
         private const int FlashMs = 2600;

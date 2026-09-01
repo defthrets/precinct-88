@@ -63,6 +63,15 @@ namespace Precinct88.Streets
         private int _nextSpawn;
 
         /// <summary>
+        /// Consecutive failures to place a unit.
+        ///
+        /// Drives how hard the search tries. On open ground the first few attempts fail on the
+        /// on-screen test alone, and something has to give or the district silently produces no
+        /// police at all.
+        /// </summary>
+        private int _failures;
+
+        /// <summary>
         /// Whether something louder is happening and the beat should stop producing cars.
         ///
         /// Wired by Main from whatever is going on: a chase, a scene, a mod on the bridge that
@@ -301,7 +310,32 @@ namespace Precinct88.Streets
 
             Vector3 spot;
             float heading;
-            if (!SpawnPoint(playerAt, beat, out spot, out heading)) return;
+
+            if (!SpawnPoint(playerAt, beat, out spot, out heading))
+            {
+                // FAILING COST A FULL COOLDOWN, and that was most of the bug. On open ground --
+                // the Chamberlain Hills tram straight, a freeway, anywhere with a long sightline
+                // -- every candidate point is visible, every attempt is rejected, and the next
+                // one is not tried for up to seventy seconds. The result is a district that
+                // never produces a car and a player at four stars in an empty city.
+                //
+                // A failure is now worth retrying almost immediately. It costs one more search
+                // in a second rather than a minute of nothing.
+                _failures++;
+
+                _nextSpawn = now + (Surging ? 900 : 2500);
+
+                if (_failures == 6)
+                {
+                    Log.Warn("Cannot place a unit near " + Districts.ZoneAt(playerAt) +
+                             " -- every candidate was in view or off the road network. " +
+                             "Widening the search.");
+                }
+
+                return;
+            }
+
+            _failures = 0;
 
             var unit = Make(spot, heading, beat, now);
             if (unit == null) return;
@@ -362,7 +396,16 @@ namespace Precinct88.Streets
             var near = Surging ? SpawnNear * 0.7f : SpawnNear;
             var far = Surging ? SpawnFar * 0.7f : SpawnFar;
 
-            for (var attempt = 0; attempt < 5; attempt++)
+            // THE SEARCH WIDENS AS IT KEEPS FAILING. Somewhere with a long sightline has no
+            // out-of-view point at a hundred metres, and holding the radius fixed means such a
+            // place simply never gets policed. Pushing further out finds ground behind a
+            // building, over a rise, or round the curve of the road.
+            var reach = 1f + Math.Min(_failures, 8) * 0.35f;
+
+            near *= reach;
+            far *= reach;
+
+            for (var attempt = 0; attempt < 12; attempt++)
             {
                 var angle = _rng.NextDouble() * Math.PI * 2d;
                 var dist = near + (float)_rng.NextDouble() * (far - near);
@@ -374,7 +417,16 @@ namespace Precinct88.Streets
 
                 // Not in front of him. A squad car fading into existence in the middle
                 // distance is the exact thing this mod exists to stop doing.
-                if (OnScreen(spot)) continue;
+                //
+                // BUT NOT AT ANY PRICE. After enough failures the alternative is not a tidier
+                // spawn, it is NO POLICE AT ALL -- which is what four stars on an empty straight
+                // road turned out to be. Past that point a car appearing a long way off down
+                // the road is accepted, because it is much less objectionable than a city with
+                // nobody in it. Far enough away that it is a dot rather than an event.
+                if (OnScreen(spot) && (_failures < 4 || spot.DistanceTo(playerAt) < 140f))
+                {
+                    continue;
+                }
 
                 // AND NOT ON TOP OF SOMEBODY ELSE'S SCENE. Another mod's callout, a scripted
                 // roadblock, an ambulance at a crash -- all of them put emergency vehicles

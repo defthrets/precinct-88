@@ -191,9 +191,18 @@ namespace Precinct88.UI
                  "No car is ever created because of your stars. THE setting");
             Slide("Minutes on a beat", "Patrol", "BeatMinutes",
                   () => _cfg.BeatMinutes, v => _cfg.BeatMinutes = v, 1f, 60f, 1f, "0", "m");
+            Tick("Dispatch failsafe", "Patrol", "DispatchFailsafe",
+                 () => _cfg.DispatchFailsafe, v => _cfg.DispatchFailsafe = v,
+                 "Off: slow arrival is the design, not a fault");
             Tick("Blips on our police", "Patrol", "PoliceBlips",
                  () => _cfg.PoliceBlips, v => _cfg.PoliceBlips = v,
                  "Colour is the force. Dot on a beat, car on a call");
+            Tick("Crime scenes", "Patrol", "CrimeScenes",
+                 () => _cfg.CrimeScenes, v => _cfg.CrimeScenes = v,
+                 "Ambulance, then a coned-off scene, then the coroner");
+            Slide("Scene stands for", "Patrol", "CrimeSceneMinutes",
+                  () => _cfg.CrimeSceneMinutes, v => _cfg.CrimeSceneMinutes = v,
+                  0.5f, 30f, 0.5f, "0.0", "m");
             Tick("Foot patrols", "Patrol", "FootPatrols",
                  () => _cfg.FootPatrols, v => _cfg.FootPatrols = v,
                  "Town districts only. They notice what a crew in a car does");
@@ -304,8 +313,10 @@ namespace Precinct88.UI
             Slide("Fine", "Custody", "Fine",
                   () => _cfg.Fine, v => _cfg.Fine = (int)v, 0f, 25000f, 250f, "0", "",
                   prefix: "$", note: "Before the multiplier for what they booked you for");
-            Keyed("Surrender key", "Custody", "SurrenderKey",
-                  () => _cfg.SurrenderKey, v => _cfg.SurrenderKey = v);
+            Slide("Grace after release", "Custody", "ReleaseGraceSeconds",
+                  () => _cfg.ReleaseGraceSeconds, v => _cfg.ReleaseGraceSeconds = v,
+                  0f, 180f, 5f, "0", "s",
+                  note: "They just let you out. They should not shoot you at the door");
         }
 
         private static LogLevel ApplyLog(LogLevel level)

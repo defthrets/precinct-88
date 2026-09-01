@@ -31,6 +31,7 @@ namespace Precinct88
         private readonly Fleet _fleet;
         private readonly Foot _foot;
         private readonly Markers _markers;
+        private readonly Aftermath _aftermath;
         private readonly Manhunt _hunt;
         private readonly Witness _witness;
         private readonly Stop _stop;
@@ -74,6 +75,7 @@ namespace Precinct88
                 _fleet = new Fleet(_cfg);
                 _foot = new Foot(_cfg);
                 _markers = new Markers(_cfg, _fleet, _foot);
+                _aftermath = new Aftermath(_cfg);
                 _hunt = new Manhunt(_cfg, _fleet);
                 _witness = new Witness(_cfg, _hunt);
                 _stop = new Stop(_cfg, _hunt);
@@ -160,6 +162,11 @@ namespace Precinct88
             _booking.Tickets = _tickets;
 
             _surrender.Book = (officer, reason) => _booking.Begin(officer, reason);
+
+            // Hands down when they actually have you. Without it the surrender pose survives
+            // the whole booking and resumes the moment you are released.
+            _booking.Surrender = () => _surrender.Drop();
+            _booking.Violations = _violations;
 
             // Nothing prompts, reads a key, or starts a scene behind the panel. The panel
             // disables the controls itself, so this is about the PROMPTS -- and about the
@@ -397,6 +404,10 @@ namespace Precinct88
                 // exists rather than a second later.
                 _markers.Update();
 
+                // What is left behind after the police shoot somebody. Runs on its own clock
+                // and outlives the incident that caused it, which is the entire point of it.
+                _aftermath.Update();
+
                 // The vanilla generator, held off every tick because the game keeps switching
                 // it back on. See AmbientCops -- this is a lapse that looks exactly like a mod
                 // that never worked.
@@ -469,6 +480,7 @@ namespace Precinct88
 
                 // Before the peds and cars go, or the blips outlive what they were attached to.
                 if (_markers != null) _markers.Clear();
+                if (_aftermath != null) _aftermath.Release();
 
                 // Last, and unconditional. Whatever went wrong above, the player gets the
                 // police back.

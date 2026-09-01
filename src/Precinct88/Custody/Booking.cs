@@ -88,6 +88,18 @@ namespace Precinct88.Custody
         /// </summary>
         public Tickets Tickets;
 
+        /// <summary>Puts the player's hands down. Set by Main.</summary>
+        public Action Surrender;
+
+        /// <summary>
+        /// What you are currently doing wrong, cleared on booking. Set by Main.
+        ///
+        /// Its cooldowns are a record of what officers have already noticed, and walking out of
+        /// a station still on a thirty-second cooldown for the thing that got you arrested is
+        /// the record surviving the reckoning.
+        /// </summary>
+        public Contact.Violations Violations;
+
         /// <summary>
         /// Takes everything the player should not walk out with.
         ///
@@ -139,6 +151,20 @@ namespace Precinct88.Custody
             // achieved nothing.
             _hunt.Clear("arrested");
             if (_witness != null) _witness.Forget();
+
+            // HANDS DOWN. Surrender was left running through the whole booking -- Main stops
+            // ticking it once InCustody is true, so Handing stayed set, and the moment the
+            // player was released it picked straight back up and told him to stay still while
+            // stood outside the station. Which is exactly what it looked like.
+            if (Surrender != null) Surrender();
+
+            // THE WHOLE SLATE, not just the current incident. Clear() ends an incident; Booked()
+            // ends a record -- the warm crime scene you could have walked back into, the
+            // violations still on cooldown, and a good part of how violently you are thought to
+            // work. Being taken in is the reckoning for all of it.
+            _hunt.Booked();
+
+            if (Violations != null) Violations.Forget();
             if (Licence != null) Licence.Wipe("arrested");
             if (Tickets != null) Tickets.Wipe("arrested");
 
@@ -371,6 +397,19 @@ namespace Precinct88.Custody
             }
 
             if (charge && me != null && me.Exists()) Charge(me);
+
+            // WALKING OUT OF A STATION IS NOT A CRIME.
+            //
+            // Released on the pavement, at night, beside the scenario cops who stand outside
+            // every station -- and with nothing stopping the engine handing out a star for
+            // whatever it felt like, Manhunt adopting it, and two officers opening fire on
+            // somebody they had just let go. Reported from the game, and it is the worst thing
+            // this mod has done.
+            //
+            // So there is a grace period. The wanted level is cleared, the engine's officers
+            // are told to leave him alone, and nothing is adopted until it lapses. Long enough
+            // to walk away from the door and no longer.
+            if (_hunt != null) _hunt.Amnesty(_cfg.ReleaseGraceSeconds);
 
             // The car and the escort are handed back to the game. They were part of a scene
             // that is over, and holding them would leave a squad car parked in the street for

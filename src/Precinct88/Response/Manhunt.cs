@@ -96,6 +96,35 @@ namespace Precinct88.Response
         private int _pushedStars = -1;
 
         /// <summary>
+        /// When this incident started expecting somebody, and whether anybody has come.
+        ///
+        /// THE MOD HAS TO NOTICE ITS OWN FAILURE. With every engine dispatch service off, the
+        /// Fleet is the whole police force -- and if it cannot place a unit, which turned out to
+        /// happen on any open ground with a long sightline, the player sits at four stars in an
+        /// empty city and the mod has broken the game rather than improved it.
+        ///
+        /// No amount of argument about finite police is worth that, so it watches for it.
+        /// </summary>
+        private int _wantedSince;
+        private bool _gaveUp;
+
+        /// <summary>How long a serious call goes unanswered before the engine is asked to help.</summary>
+        private const int NobodyCameMs = 20000;
+
+        /// <summary>How long after a hold lifts before a star counts as new rather than left over.</summary>
+        private const int HoldResidueMs = 6000;
+
+        /// <summary>
+        /// Until when the player is being left alone.
+        ///
+        /// For the minute after being released from custody. Nothing is adopted, no star
+        /// sticks, and the engine's own officers are told to ignore him -- because being let out
+        /// of a station and immediately shot by the people who let you out is not a policing
+        /// mechanic, it is a bug wearing one.
+        /// </summary>
+        private int _amnestyUntil;
+
+        /// <summary>
         /// Where the last incident happened, and for how long it is still a place with police
         /// interest in it.
         ///
@@ -260,6 +289,53 @@ namespace Precinct88.Response
             }
         }
 
+        /// <summary>
+        /// Booked. The slate is genuinely clean, not merely quiet.
+        ///
+        /// Clear() ends an INCIDENT. This ends a RECORD, and the difference is everything that
+        /// outlives an incident on purpose: the warm crime scene you could walk back into, the
+        /// violations still on cooldown, the profile that remembers how you have been going
+        /// about things. Being arrested is the reckoning for all of it, and carrying any of it
+        /// through afterwards is charging twice for one evening.
+        ///
+        /// The profile is REDUCED rather than wiped, and that is the one deliberate exception.
+        /// It is not a charge -- it is how violently you work, which is a fact about you rather
+        /// than a thing you are accused of. Wiping it outright would make an arrest the cheapest
+        /// possible way to launder a reputation, so an arrest moves it a long way and does not
+        /// pretend the last month never happened.
+        /// </summary>
+        public void Booked()
+        {
+            Clear("arrested");
+
+            _sceneCold = 0;
+            _bloody = false;
+
+            if (_cfg.CriminalProfile) _profile.Served();
+        }
+
+        /// <summary>
+        /// Leaves the player alone for a while.
+        ///
+        /// Deliberately NOT a LawHold. A hold is a scene saying "none of this is a police
+        /// matter" and it stacks, so one taken here would have to be released by whoever took
+        /// it -- and the single thing a grace period must never do is fail to end. This is a
+        /// timestamp, and a timestamp cannot leak.
+        /// </summary>
+        public void Amnesty(float seconds)
+        {
+            if (seconds <= 0f) return;
+
+            _amnestyUntil = Game.GameTime + (int)(seconds * 1000f);
+
+            Clear("released");
+
+            Log.Info("Amnesty for " + seconds.ToString("0") + "s after release.");
+        }
+
+        /// <summary>Whether the player is currently being left alone.</summary>
+        public bool InAmnesty => Game.GameTime < _amnestyUntil;
+
         /// <summary>Everything is dropped. For a hold starting, a death, or an arrest.</summary>
         public void Clear(string why)
         {
@@ -344,6 +420,32 @@ namespace Precinct88.Response
             var me = Game.Player.Character;
             if (me == null || !me.Exists()) return;
 
+            // THE GRACE PERIOD, and it sits above everything so nothing can route round it.
+            if (_amnestyUntil != 0)
+            {
+                if (now < _amnestyUntil)
+                {
+                    try
+                    {
+                        Game.Player.Wanted.SetWantedLevel(0, false);
+                        Game.Player.Wanted.ApplyWantedLevelChangeNow(false);
+                    }
+                    catch
+                    {
+                        // Nothing to do about it; the ignore below is the real protection.
+                    }
+
+                    LawHold.Ignore(true);
+                    return;
+                }
+
+                // Lapsed. Attention back on, once.
+                _amnestyUntil = 0;
+                LawHold.Ignore(false);
+
+                Log.Info("Amnesty over.");
+            }
+
             if (State == Hunt.Clear)
             {
                 // Cool off whatever is left, so a near-miss does not carry into the next one.
@@ -426,12 +528,20 @@ namespace Precinct88.Response
 
             if (level <= 0) return;
 
-            // Read back rather than guessed at. Three stars from the engine is violence of
-            // some sort; one is somebody having seen something.
+            // NOT WHILE A HOLD IS STILL SETTLING. A star that exists the moment a hold comes
+            // off is residue from whatever was being held -- a gang war leaves a street full of
+            // bodies and the engine notices the instant it is allowed to. Adopting that as a
+            // fresh crime is how a war ended with the player being announced for loitering.
+            if (Game.GameTime - LawHold.ReleasedAt < HoldResidueMs) return;
+
+            // Read back rather than guessed at, and only as far as the reading goes. Three
+            // stars from the engine is violence of some sort and two is a fight -- but ONE star
+            // says nothing at all, and the old code called that loitering, which is a specific
+            // accusation for something the mod has no information about.
             var what = level >= 4 ? Offence.Homicide
                      : level == 3 ? Offence.ShotsFired
                      : level == 2 ? Offence.Assault
-                     : Offence.Loitering;
+                     : Offence.Disturbance;
 
             Log.Info("Adopting a " + level + "-star level this mod did not issue, as " + what + ".");
 
@@ -703,8 +813,70 @@ namespace Precinct88.Response
             if (_fleet != null)
             {
                 _fleet.Surge = Surge();
-                _fleet.SurgeTo = State == Hunt.Seen ? _searchFrom : _searchFrom;
+                _fleet.SurgeTo = _searchFrom;
             }
+
+            Answered();
+        }
+
+        /// <summary>
+        /// Whether anybody of ours has actually turned up, and what to do when nobody has.
+        ///
+        /// Only for calls worth answering -- three stars and above. Below that, nobody coming is
+        /// a quiet district behaving exactly as intended, and reaching for the engine would
+        /// throw away the entire point of a finite force.
+        /// </summary>
+        private void Answered()
+        {
+            // Slow is the design. Only somebody who has explicitly asked for the safety net
+            // gets it, because handing dispatch back to the engine replaces the behaviour this
+            // whole mod exists to provide.
+            if (!_cfg.DispatchFailsafe)
+            {
+                if (_gaveUp) Streets.AmbientCops.Fallback(false);
+                _gaveUp = false;
+                _wantedSince = 0;
+                return;
+            }
+
+            if (_pushedStars < 3 || _fleet == null)
+            {
+                if (_gaveUp) Streets.AmbientCops.Fallback(false);
+                _gaveUp = false;
+                _wantedSince = 0;
+                return;
+            }
+
+            var now = Game.GameTime;
+
+            if (_wantedSince == 0) _wantedSince = now;
+
+            // Somebody is on it. That is the system working, and the clock resets.
+            if (_fleet.OnCalls() > 0 || _fleet.Count > 0)
+            {
+                if (_fleet.OnCalls() > 0)
+                {
+                    _wantedSince = now;
+
+                    if (_gaveUp)
+                    {
+                        Streets.AmbientCops.Fallback(false);
+                        _gaveUp = false;
+                    }
+
+                    return;
+                }
+            }
+
+            if (_gaveUp) return;
+            if (now - _wantedSince < NobodyCameMs) return;
+
+            _gaveUp = true;
+            Streets.AmbientCops.Fallback(true);
+
+            Log.Warn("Nothing of ours reached a " + _pushedStars + "-star call in " +
+                     (NobodyCameMs / 1000) + "s (" + _fleet.Count + " unit(s) on the road). " +
+                     "The engine is answering this one.");
         }
 
         /// <summary>
@@ -733,6 +905,10 @@ namespace Precinct88.Response
         public void RestoreDispatch()
         {
             Streets.AmbientCops.Allow(false, false);
+            Streets.AmbientCops.Fallback(false);
+
+            _gaveUp = false;
+            _wantedSince = 0;
 
             if (_fleet != null) _fleet.Surge = 0;
         }

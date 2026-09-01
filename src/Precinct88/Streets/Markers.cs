@@ -63,8 +63,15 @@ namespace Precinct88.Streets
                     {
                         if (!unit.Alive) continue;
 
+                        var onACall = unit.Doing == Duty.Responding ||
+                                      unit.Doing == Duty.Searching;
+
                         wanted.Add(unit.Car.Handle);
-                        Mark(unit.Car, Sprite(unit), Colour(unit.Force), unit.Force);
+
+                        Mark(unit.Car, Sprite(unit),
+                             onACall ? BlipColor.Red : Colour(unit.Force),
+                             onACall ? "Responding" : unit.Force,
+                             onACall ? 0.75f : 0.6f);
                     }
                 }
 
@@ -75,7 +82,10 @@ namespace Precinct88.Streets
                         if (!walker.Alive) continue;
 
                         wanted.Add(walker.Who.Handle);
-                        Mark(walker.Who, BlipSprite.PoliceOfficer, BlipColor.Blue, "On foot");
+
+                        // Smaller, so a man reads as smaller than a car without needing a
+                        // different shape.
+                        Mark(walker.Who, BlipSprite.Standard, Colour("City"), "On foot", 0.45f);
                     }
                 }
 
@@ -90,13 +100,22 @@ namespace Precinct88.Streets
             }
         }
 
+        /// <summary>
+        /// A DOT, NOT THE CAR SPRITE.
+        ///
+        /// BlipSprite.PoliceCar is FIXED ART -- a white car silhouette that ignores the colour
+        /// you set on it. So every unit came out white whatever force it belonged to, the whole
+        /// colour scheme silently did nothing, and the minimap filled with white cars that look
+        /// like the game's own markers rather than this mod's.
+        ///
+        /// Sprite 1 is the plain blip and it takes a tint properly, which is what makes the
+        /// force colours mean anything. A unit on a call is told apart by COLOUR rather than by
+        /// shape now -- red against the force colour -- which reads better on a minimap that
+        /// size anyway.
+        /// </summary>
         private static BlipSprite Sprite(Unit unit)
         {
-            // A unit on a call is worth telling apart from one on a beat -- it is the clearest
-            // possible answer to "did the dispatch actually send anybody".
-            return unit.Doing == Duty.Responding || unit.Doing == Duty.Searching
-                ? BlipSprite.PoliceCar
-                : BlipSprite.PoliceCarDot;
+            return BlipSprite.Standard;
         }
 
         private static BlipColor Colour(string force)
@@ -119,7 +138,8 @@ namespace Precinct88.Streets
             return BlipColor.Blue;
         }
 
-        private void Mark(Entity what, BlipSprite sprite, BlipColor colour, string name)
+        private void Mark(Entity what, BlipSprite sprite, BlipColor colour, string name,
+                          float scale)
         {
             try
             {
@@ -127,10 +147,11 @@ namespace Precinct88.Streets
 
                 if (_blips.TryGetValue(what.Handle, out blip) && blip != null && blip.Exists())
                 {
-                    // Kept up to date rather than recreated -- the sprite changes when a unit
+                    // Kept up to date rather than recreated -- the COLOUR changes when a unit
                     // goes from a beat to a call, and deleting and remaking a blip every second
                     // makes the whole map flicker.
-                    blip.Sprite = sprite;
+                    blip.Color = colour;
+                    blip.Scale = scale;
                     return;
                 }
 
@@ -140,7 +161,7 @@ namespace Precinct88.Streets
 
                 blip.Sprite = sprite;
                 blip.Color = colour;
-                blip.Scale = 0.7f;
+                blip.Scale = scale;
                 blip.IsShortRange = false;
                 blip.Name = name;
 
