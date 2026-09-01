@@ -90,6 +90,17 @@ namespace Precinct88.Core
         /// </summary>
         public bool OwnDispatch = true;
 
+        /// <summary>
+        /// Officers who are not in a car.
+        ///
+        /// Every other officer in the mod is inside a vehicle, which quietly meant a stop could
+        /// only come from a road and a busy pavement had no police on it however busy it was.
+        /// </summary>
+        public bool FootPatrols = true;
+
+        /// <summary>How many walk a beat at once, before the district weighting.</summary>
+        public int FootUnits = 2;
+
         /// <summary>Minutes before a unit has finished its round and goes home.</summary>
         public float BeatMinutes = 11f;
 
@@ -313,6 +324,8 @@ namespace Precinct88.Core
                 s.BeatMinutes = Clamp(ini.GetFloat("Patrol", "BeatMinutes", s.BeatMinutes), 1f, 60f);
                 s.FromStations = ini.GetBool("Patrol", "FromStations", s.FromStations);
                 s.OwnDispatch = ini.GetBool("Patrol", "OwnDispatch", s.OwnDispatch);
+                s.FootPatrols = ini.GetBool("Patrol", "FootPatrols", s.FootPatrols);
+                s.FootUnits = (int)Clamp(ini.GetInt("Patrol", "FootUnits", s.FootUnits), 0f, 8f);
                 s.AlleyPatrol = Clamp(ini.GetFloat("Patrol", "AlleyPatrol", s.AlleyPatrol), 0f, 2f);
                 s.Spotlights = ini.GetBool("Patrol", "Spotlights", s.Spotlights);
 

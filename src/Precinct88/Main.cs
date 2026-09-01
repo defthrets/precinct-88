@@ -29,6 +29,7 @@ namespace Precinct88
         private readonly Settings _cfg;
 
         private readonly Fleet _fleet;
+        private readonly Foot _foot;
         private readonly Manhunt _hunt;
         private readonly Witness _witness;
         private readonly Stop _stop;
@@ -68,6 +69,7 @@ namespace Precinct88
                 }
 
                 _fleet = new Fleet(_cfg);
+                _foot = new Foot(_cfg);
                 _hunt = new Manhunt(_cfg, _fleet);
                 _witness = new Witness(_cfg, _hunt);
                 _stop = new Stop(_cfg, _hunt);
@@ -81,7 +83,7 @@ namespace Precinct88
                 // Given the bridge as a function rather than a value, because whether Hoodrich
                 // is on the other end is not knowable yet -- its own script may not be built,
                 // and it registers a handler whenever it gets round to it.
-                _screen = new SettingsScreen(_cfg, _fleet, _hunt, _licence,
+                _screen = new SettingsScreen(_cfg, _fleet, _foot, _hunt, _licence,
                                              () => Dispatch.Seizer != null);
                 _hud = new Hud(_cfg, _hunt, _stop, _booking, _surrender);
                 _beam = new Spotlight(_cfg, _fleet);
@@ -126,6 +128,7 @@ namespace Precinct88
             // easing round the corner into the middle of somebody being cuffed is two scenes
             // in one street.
             _fleet.Busy = () => _stop.Running || _booking.Running || _standDown;
+            _foot.Busy = () => _booking.Running || _standDown;
 
             // The manhunt talks; it does not draw.
             _hunt.Say = Screen.Ticker;
@@ -376,6 +379,7 @@ namespace Precinct88
                 // 8. The beat. LAST, because by now everything that could have claimed a unit
                 //    has claimed it, and Fleet will not touch a unit in Duty.Contact.
                 _fleet.Update();
+                _foot.Update();
 
                 // The vanilla generator, held off every tick because the game keeps switching
                 // it back on. See AmbientCops -- this is a lapse that looks exactly like a mod
@@ -440,6 +444,7 @@ namespace Precinct88
                 AmbientCops.Release();
 
                 if (_fleet != null) _fleet.Release();
+                if (_foot != null) _foot.Release();
 
                 // Last, and unconditional. Whatever went wrong above, the player gets the
                 // police back.

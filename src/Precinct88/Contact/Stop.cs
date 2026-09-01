@@ -90,6 +90,26 @@ namespace Precinct88.Contact
         /// <summary>Walk off further than this and the stop is over, badly.</summary>
         private const float WalkedOff = 14f;
 
+        /// <summary>
+        /// How far you may move the CAR without it counting as leaving.
+        ///
+        /// Pull Me Over's line is "you're free to move your vehicle within a 10m radius", and it
+        /// is a small mercy that matters more than it sounds. You very often stop badly -- half
+        /// on a kerb, across somebody's drive, in a live lane -- and a mod where nudging forward
+        /// two metres to get out of the way is indistinguishable from making a run for it
+        /// punishes you for the one considerate thing you can do during a traffic stop.
+        ///
+        /// Generous while you are still IN the car, because that is somebody repositioning.
+        /// Tight once you are out on the pavement, because that is somebody walking off.
+        /// </summary>
+        private const float Leash = 10f;
+
+        /// <summary>Where he stands: beside the driver's door, half a step back.</summary>
+        private static readonly Vector3 WindowOffset = new Vector3(-1.35f, 0.15f, 0f);
+
+        /// <summary>Close enough to the window to be stood at it.</summary>
+        private const float AtTheWindow = 1.6f;
+
         private readonly Settings _cfg;
         private readonly Manhunt _hunt;
         private readonly Random _rng = new Random();
@@ -375,9 +395,17 @@ namespace Precinct88.Contact
                 }
             }
 
-            var gap = _officer.Position.DistanceTo(me.Position);
+            // WHERE HE IS WALKING TO, and it is not simply "the player". A man still sitting
+            // in his car is approached at the driver's window; a man standing on the pavement
+            // is approached directly. Walking to the player's own position while he is in a car
+            // aims the officer at the middle of the vehicle, which reads as him trying to walk
+            // through the door.
+            var window = Window(me);
+            var target = window ?? me.Position;
 
-            if (gap < TalkRange)
+            var gap = _officer.Position.DistanceTo(target);
+
+            if (gap < (window.HasValue ? AtTheWindow : TalkRange))
             {
                 Go(Beat.Talking, now);
                 return;
@@ -393,8 +421,19 @@ namespace Precinct88.Contact
             {
                 if (!_officer.IsInVehicle())
                 {
-                    Function.Call(Hash.TASK_GO_TO_ENTITY, _officer.Handle, me.Handle,
-                                  -1, TalkRange * 0.8f, 1.8f, 0f, 0);
+                    if (window.HasValue)
+                    {
+                        // To a POINT rather than to an entity, because the point is beside the
+                        // car and the entity is inside it.
+                        Function.Call(Hash.TASK_FOLLOW_NAV_MESH_TO_COORD, _officer.Handle,
+                                      window.Value.X, window.Value.Y, window.Value.Z,
+                                      1.6f, -1, AtTheWindow * 0.6f, 0, 0f);
+                    }
+                    else
+                    {
+                        Function.Call(Hash.TASK_GO_TO_ENTITY, _officer.Handle, me.Handle,
+                                      -1, TalkRange * 0.8f, 1.8f, 0f, 0);
+                    }
                 }
             }
             catch (Exception ex)
@@ -406,6 +445,7 @@ namespace Precinct88.Contact
         private void Talking(Ped me, int now)
         {
             Face(me);
+            KeepAtTheWindow(me);
 
             if (WalkedAway(me)) { Ran(me, "walking away from a stop"); return; }
 
@@ -487,6 +527,7 @@ namespace Precinct88.Contact
         private void Searching(Ped me, int now)
         {
             Face(me);
+            KeepAtTheWindow(me);
 
             if (WalkedAway(me)) { Ran(me, "walking out of a search"); return; }
 
@@ -616,12 +657,84 @@ namespace Precinct88.Contact
             _hunt.Report(worse, me.Position, Known.Face | Known.Clothes | Known.Vehicle);
         }
 
+        /// <summary>
+        /// Where the driver's window is, or null when he is not sitting in anything.
+        ///
+        /// Left side, because GTA V drives on the right and the driver sits on the left. Half a
+        /// step back from the door line, which is where somebody actually stands to talk to a
+        /// driver rather than in the door's swing.
+        /// </summary>
+        private Vector3? Window(Ped me)
+        {
+            try
+            {
+                if (!me.IsInVehicle()) return null;
+
+                var car = me.CurrentVehicle;
+                if (!Cops.Alive(car)) return null;
+
+                // Not a bike. There is no window on a motorcycle and the offset puts him in
+                // the road beside it, which looks like he has wandered off.
+                if (Function.Call<bool>(Hash.IS_THIS_MODEL_A_BIKE, car.Model.Hash)) return null;
+                if (Function.Call<bool>(Hash.IS_THIS_MODEL_A_BICYCLE, car.Model.Hash)) return null;
+
+                return car.GetOffsetPosition(WindowOffset);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Keeps him beside the door while the car is being nudged about.
+        ///
+        /// THIS IS THE OTHER HALF OF THE LEASH. Being allowed to reposition is worth nothing if
+        /// the officer stays where the car used to be and the stop then ends because he is now
+        /// eight metres away from it. He follows, slowly, and only when it is actually worth
+        /// moving for -- re-tasking a ped every frame stops him ever finishing a step.
+        /// </summary>
+        private void KeepAtTheWindow(Ped me)
+        {
+            try
+            {
+                if (!Cops.Alive(_officer)) return;
+
+                var window = Window(me);
+                if (!window.HasValue) return;
+
+                var drift = _officer.Position.DistanceTo(window.Value);
+
+                if (drift < AtTheWindow * 1.6f) return;
+
+                Function.Call(Hash.TASK_FOLLOW_NAV_MESH_TO_COORD, _officer.Handle,
+                              window.Value.X, window.Value.Y, window.Value.Z,
+                              1.4f, -1, AtTheWindow * 0.6f, 0, 0f);
+            }
+            catch
+            {
+                // He stays where he is, and the leash below decides whether that matters.
+            }
+        }
+
+        /// <summary>
+        /// Whether the player has actually left, as opposed to having shuffled.
+        ///
+        /// TWO DISTANCES, and the difference is the whole of Pull Me Over's ten-metre mercy. A
+        /// man still sitting in his car who has rolled forward to get out of a live lane is
+        /// repositioning; a man on the pavement walking in a straight line is leaving. Treating
+        /// those the same means the considerate thing you can do during a traffic stop is
+        /// indistinguishable from running.
+        /// </summary>
         private bool WalkedAway(Ped me)
         {
             try
             {
-                return !Cops.Alive(_officer) ||
-                       _officer.Position.DistanceTo(me.Position) > WalkedOff;
+                if (!Cops.Alive(_officer)) return true;
+
+                var gap = _officer.Position.DistanceTo(me.Position);
+
+                return gap > (me.IsInVehicle() ? WalkedOff + Leash : WalkedOff);
             }
             catch
             {

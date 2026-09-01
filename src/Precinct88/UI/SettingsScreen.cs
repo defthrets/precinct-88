@@ -103,6 +103,7 @@ namespace Precinct88.UI
 
         private readonly Settings _cfg;
         private readonly Fleet _fleet;
+        private readonly Foot _foot;
         private readonly Manhunt _hunt;
         private readonly Func<bool> _bridged;
         private readonly Licence _licence;
@@ -118,11 +119,12 @@ namespace Precinct88.UI
 
         public bool IsOpen { get; private set; }
 
-        public SettingsScreen(Settings cfg, Fleet fleet, Manhunt hunt, Licence licence,
+        public SettingsScreen(Settings cfg, Fleet fleet, Foot foot, Manhunt hunt, Licence licence,
                               Func<bool> bridged)
         {
             _cfg = cfg;
             _fleet = fleet;
+            _foot = foot;
             _hunt = hunt;
             _licence = licence;
             _bridged = bridged;
@@ -187,6 +189,11 @@ namespace Precinct88.UI
                  "No car is ever created because of your stars. THE setting");
             Slide("Minutes on a beat", "Patrol", "BeatMinutes",
                   () => _cfg.BeatMinutes, v => _cfg.BeatMinutes = v, 1f, 60f, 1f, "0", "m");
+            Tick("Foot patrols", "Patrol", "FootPatrols",
+                 () => _cfg.FootPatrols, v => _cfg.FootPatrols = v,
+                 "Town districts only. They notice what a crew in a car does");
+            Slide("Officers on foot", "Patrol", "FootUnits",
+                  () => _cfg.FootUnits, v => _cfg.FootUnits = (int)v, 0f, 8f, 1f, "0");
             Tick("Come from a station", "Patrol", "FromStations",
                  () => _cfg.FromStations, v => _cfg.FromStations = v,
                  "Skipped automatically when the nearest one is too far");
@@ -660,6 +667,7 @@ namespace Precinct88.UI
                         right, y, NoteScale, Faint, rightAligned: true);
 
             Screen.Text("units out " + units + "   on a call " + onCalls +
+                        "   on foot " + (_foot == null ? 0 : _foot.Count) +
                         "   back streets " + backs +
                         (surge > 0 ? "   surge +" + surge : ""),
                         left, y, NoteScale, surge > 0 ? Warn : Dim);
