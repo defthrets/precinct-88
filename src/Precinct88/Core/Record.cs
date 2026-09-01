@@ -22,7 +22,7 @@ namespace Precinct88.Core
         /// <summary>Bumped when the shape changes in a way an old file cannot be read as.</summary>
         private const int Version = 1;
 
-        public static void Load(Profile profile, Licence licence)
+        public static void Load(Profile profile, Licence licence, Tickets tickets)
         {
             try
             {
@@ -37,9 +37,11 @@ namespace Precinct88.Core
 
                 if (profile != null) profile.FromJson(doc);
                 if (licence != null) licence.FromJson(doc);
+                if (tickets != null) tickets.FromJson(doc);
 
                 Log.Info("Record loaded: " + (profile == null ? "?" : profile.Word) +
-                         ", " + (licence == null ? 0 : licence.Points) + " licence point(s).");
+                         ", " + (licence == null ? 0 : licence.Points) + " licence point(s), " +
+                         Tickets.Money(tickets == null ? 0 : tickets.Owed) + " outstanding.");
             }
             catch (Exception ex)
             {
@@ -53,13 +55,15 @@ namespace Precinct88.Core
         /// Both halves are asked whether they are dirty, and the document is built from BOTH
         /// whichever one asked -- which is the entire point of this class existing.
         /// </summary>
-        public static void Save(Profile profile, Licence licence, bool force = false)
+        public static void Save(Profile profile, Licence licence, Tickets tickets,
+                                bool force = false)
         {
             try
             {
                 var dirty = force ||
                             (profile != null && profile.Dirty) ||
-                            (licence != null && licence.Dirty);
+                            (licence != null && licence.Dirty) ||
+                            (tickets != null && tickets.Dirty);
 
                 if (!dirty) return;
 
@@ -68,11 +72,13 @@ namespace Precinct88.Core
 
                 if (profile != null) profile.ToJson(doc);
                 if (licence != null) licence.ToJson(doc);
+                if (tickets != null) tickets.ToJson(doc);
 
                 if (!JsonFile.Write(Paths.SaveFile, doc)) return;
 
                 if (profile != null) profile.Clean();
                 if (licence != null) licence.Clean();
+                if (tickets != null) tickets.Clean();
             }
             catch (Exception ex)
             {

@@ -36,6 +36,8 @@ namespace Precinct88
         private readonly Watch _watch;
         private readonly Violations _violations;
         private readonly Licence _licence;
+        private readonly Tickets _tickets;
+        private readonly PayDesk _payDesk;
         private readonly Impound _impound;
         private readonly Surrender _surrender;
         private readonly Booking _booking;
@@ -74,6 +76,8 @@ namespace Precinct88
                 _witness = new Witness(_cfg, _hunt);
                 _stop = new Stop(_cfg, _hunt);
                 _licence = new Licence { ExpireMinutes = _cfg.ChargeMinutes };
+                _tickets = new Tickets { InterestPercent = _cfg.TicketInterest };
+                _payDesk = new PayDesk(_cfg, _tickets);
                 _impound = new Impound(_cfg, _licence);
                 _violations = new Violations(_cfg, _licence);
                 _watch = new Watch(_cfg, _fleet, _stop, _violations);
@@ -83,7 +87,7 @@ namespace Precinct88
                 // Given the bridge as a function rather than a value, because whether Hoodrich
                 // is on the other end is not knowable yet -- its own script may not be built,
                 // and it registers a handler whenever it gets round to it.
-                _screen = new SettingsScreen(_cfg, _fleet, _foot, _hunt, _licence,
+                _screen = new SettingsScreen(_cfg, _fleet, _foot, _hunt, _licence, _tickets,
                                              () => Dispatch.Seizer != null);
                 _hud = new Hud(_cfg, _hunt, _stop, _booking, _surrender);
                 _beam = new Spotlight(_cfg, _fleet);
@@ -91,7 +95,7 @@ namespace Precinct88
 
                 // The one thing in this mod that outlives a session. ONE file, ONE owner --
                 // see Core.Record for why that had to be pulled out of Profile.
-                Core.Record.Load(_cfg.CriminalProfile ? _hunt.Record : null, _licence);
+                Core.Record.Load(_cfg.CriminalProfile ? _hunt.Record : null, _licence, _tickets);
 
                 Wire();
 
@@ -136,7 +140,7 @@ namespace Precinct88
             // And asks for the record to be written when an incident ends, without knowing
             // what else is in it.
             _hunt.Checkpoint = () =>
-                Core.Record.Save(_cfg.CriminalProfile ? _hunt.Record : null, _licence);
+                Core.Record.Save(_cfg.CriminalProfile ? _hunt.Record : null, _licence, _tickets);
 
             // Both places the player can be searched hand off to the same seizure handler,
             // which is whatever is on the bridge -- or nothing.
@@ -148,8 +152,10 @@ namespace Precinct88
             _stop.Book = reason => _booking.Begin(null, reason);
 
             _stop.Licence = _licence;
+            _stop.Tickets = _tickets;
             _stop.Impound = _impound;
             _booking.Licence = _licence;
+            _booking.Tickets = _tickets;
 
             _surrender.Book = (officer, reason) => _booking.Begin(officer, reason);
 
@@ -373,6 +379,10 @@ namespace Precinct88
                 // things nothing gets told about.
                 _impound.Update();
 
+                // The ledger, and the desk you settle it at. Both cheap when nothing is owed.
+                _tickets.Update();
+                _payDesk.Update();
+
                 // 7. Whether to start a stop.
                 _watch.Update();
 
@@ -430,7 +440,8 @@ namespace Precinct88
 
                     // Forced, because an unload is the one moment there is no later checkpoint
                     // to rely on.
-                    Core.Record.Save(_cfg.CriminalProfile ? _hunt.Record : null, _licence, true);
+                    Core.Record.Save(_cfg.CriminalProfile ? _hunt.Record : null, _licence,
+                                     _tickets, true);
                 }
 
                 Cameras.Forget();
@@ -438,6 +449,10 @@ namespace Precinct88
                 // Nothing stays locked after the mod unloads. A player left unable to open his
                 // own car by a script that is no longer running has no way to work out why.
                 if (_impound != null) _impound.Release("the mod is unloading");
+
+                // A blip left behind by a script that is no longer running is a marker nobody
+                // can get rid of.
+                if (_payDesk != null) _payDesk.Unmark();
 
                 // The generator back on before the cars go, so the streets are not empty of
                 // police for the gap between this and whatever loads next.

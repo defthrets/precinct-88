@@ -221,6 +221,19 @@ namespace Precinct88.Core
         public float SpeedHudY = 0.895f;
 
         /// <summary>
+        /// Interest on unpaid fines, per GAME day.
+        ///
+        /// Per game day rather than per real minute, which is the only choice that reads as
+        /// interest rather than as a leak -- a GTA day is forty-eight real minutes, so three
+        /// percent is an ignorable pressure over one session and a genuine problem over ten.
+        /// Zero switches it off and leaves the debt sitting there.
+        /// </summary>
+        public float TicketInterest = 3f;
+
+        /// <summary>A marker on the station you can settle up at, while you owe anything.</summary>
+        public bool TicketBlips = true;
+
+        /// <summary>
         /// Whether losing your licence costs you the car you are stopped in.
         ///
         /// Without it a suspension is a word in a panel -- you carry on driving the same car
@@ -351,6 +364,9 @@ namespace Precinct88.Core
                 s.EnforceCars = ini.GetBool("Contact", "EnforceCars", s.EnforceCars);
                 s.EnforceBikes = ini.GetBool("Contact", "EnforceBikes", s.EnforceBikes);
                 s.EnforceBicycles = ini.GetBool("Contact", "EnforceBicycles", s.EnforceBicycles);
+                s.TicketInterest = Clamp(ini.GetFloat("Contact", "TicketInterest",
+                                                      s.TicketInterest), 0f, 50f);
+                s.TicketBlips = ini.GetBool("Contact", "TicketBlips", s.TicketBlips);
                 s.SeizeOnSuspension = ini.GetBool("Contact", "SeizeOnSuspension",
                                                   s.SeizeOnSuspension);
                 s.ChargeMinutes = Clamp(ini.GetFloat("Contact", "ChargeMinutes",

@@ -172,6 +172,9 @@ namespace Precinct88.Contact
         /// <summary>What is on the player's licence. Set by Main; null is survivable.</summary>
         public Licence Licence;
 
+        /// <summary>What is outstanding. Set by Main; null is survivable.</summary>
+        public Tickets Tickets;
+
         /// <summary>Where seized cars go. Set by Main; null is survivable.</summary>
         public Impound Impound;
 
@@ -612,7 +615,7 @@ namespace Precinct88.Contact
                     }
                 }
 
-                var line = Ticketing.Settle(Because, Licence,
+                var line = Ticketing.Settle(Because, Licence, Tickets,
                                             _unit == null ? Temper.Normal : _unit.Temper, _cfg);
 
                 if (!string.IsNullOrEmpty(line))

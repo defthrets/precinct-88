@@ -80,6 +80,15 @@ namespace Precinct88.Custody
         public Licence Licence;
 
         /// <summary>
+        /// The ledger, written off on booking. Set by Main.
+        ///
+        /// Being taken in and fined IS the reckoning. Walking out of a station still owing for
+        /// the tickets that led you into it would be charging twice for the same evening --
+        /// the same reasoning that wipes the licence.
+        /// </summary>
+        public Tickets Tickets;
+
+        /// <summary>
         /// Takes everything the player should not walk out with.
         ///
         /// Same shape as the one on Stop and for the same reason: whoever is on the bridge
@@ -131,6 +140,7 @@ namespace Precinct88.Custody
             _hunt.Clear("arrested");
             if (_witness != null) _witness.Forget();
             if (Licence != null) Licence.Wipe("arrested");
+            if (Tickets != null) Tickets.Wipe("arrested");
 
             // HELD, not capped, and released in Finish. For the length of a booking the player
             // genuinely is not a police matter -- he is already in their hands.

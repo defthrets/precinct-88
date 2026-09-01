@@ -75,19 +75,13 @@ namespace Precinct88.Contact
             get { Prune(); return _charges.Count; }
         }
 
-        /// <summary>Everything owed and never paid. Feature 9 turns this into a ledger.</summary>
-        public int Owed
-        {
-            get
-            {
-                Prune();
-
-                var n = 0;
-                for (var i = 0; i < _charges.Count; i++) n += _charges[i].Fine;
-
-                return n;
-            }
-        }
+        // NO Owed HERE ANY MORE, and its absence is the point.
+        //
+        // It used to sum the fine on every charge -- including every one already paid -- so the
+        // panel confidently reported a debt that did not exist. The mistake was treating a
+        // CHARGE and a DEBT as one thing. A charge is points and it expires; a debt is money and
+        // it does not. Tickets owns the money now, and the fine recorded on a charge is kept
+        // only as a note of what it was for.
 
         public bool IsSuspended => Points >= Suspended;
 

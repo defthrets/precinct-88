@@ -87,7 +87,7 @@ namespace Precinct88.Contact
         /// you have two left before you lose it.
         /// </summary>
         public static string Settle(IReadOnlyList<Violation> what, Licence licence,
-                                    Temper temper, Settings cfg)
+                                    Tickets tickets, Temper temper, Settings cfg)
         {
             if (what == null || what.Count == 0) return string.Empty;
 
@@ -120,10 +120,18 @@ namespace Precinct88.Contact
                 fine += f;
             }
 
-            Charge(fine);
+            // BOOKED, NOT TAKEN. An officer at a car window does not run a card machine, and
+            // the old behaviour -- money out of your pocket the instant the ticket was written
+            // -- is not what a ticket is. It goes on the ledger and you settle it at a station.
+            if (tickets != null) tickets.Add(fine);
 
             var line = "Ticket: " + Money(fine) + ", " + points +
                        (points == 1 ? " point" : " points") + ".";
+
+            if (tickets != null && tickets.Owed > fine)
+            {
+                line += " " + Money(tickets.Owed) + " outstanding.";
+            }
 
             var left = Licence.Suspended - licence.Points;
 
@@ -167,29 +175,6 @@ namespace Precinct88.Contact
                 case Temper.Strict: return StrictFine;
                 case Temper.Lenient: return LenientFine;
                 default: return 1f;
-            }
-        }
-
-        /// <summary>
-        /// Takes the money, and never below zero.
-        ///
-        /// A negative balance is a state the game's own UI does not really handle, and a fine
-        /// that puts somebody there is a fine that looks like a bug. What is not paid is not
-        /// forgiven either -- it stays on the licence as an amount owed, which is what the
-        /// ledger in a later pass is built on.
-        /// </summary>
-        private static void Charge(int fine)
-        {
-            try
-            {
-                if (fine <= 0) return;
-
-                var have = Game.Player.Money;
-                Game.Player.Money = Math.Max(0, have - fine);
-            }
-            catch (Exception ex)
-            {
-                Log.Debug("Could not take the fine: " + ex.Message);
             }
         }
 

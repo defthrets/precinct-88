@@ -107,6 +107,7 @@ namespace Precinct88.UI
         private readonly Manhunt _hunt;
         private readonly Func<bool> _bridged;
         private readonly Licence _licence;
+        private readonly Tickets _tickets;
 
         private readonly List<Row> _rows = new List<Row>();
 
@@ -120,8 +121,9 @@ namespace Precinct88.UI
         public bool IsOpen { get; private set; }
 
         public SettingsScreen(Settings cfg, Fleet fleet, Foot foot, Manhunt hunt, Licence licence,
-                              Func<bool> bridged)
+                              Tickets tickets, Func<bool> bridged)
         {
+            _tickets = tickets;
             _cfg = cfg;
             _fleet = fleet;
             _foot = foot;
@@ -255,6 +257,11 @@ namespace Precinct88.UI
             Tick("Enforce on bicycles", "Contact", "EnforceBicycles",
                  () => _cfg.EnforceBicycles, v => _cfg.EnforceBicycles = v,
                  "Being pulled over on a BMX is funny exactly once");
+            Slide("Fine interest a day", "Contact", "TicketInterest",
+                  () => _cfg.TicketInterest, v => _cfg.TicketInterest = v, 0f, 25f, 0.5f, "0.0", "%",
+                  note: "Per GAME day. Pay at any station front desk");
+            Tick("Mark the pay desk", "Contact", "TicketBlips",
+                 () => _cfg.TicketBlips, v => _cfg.TicketBlips = v);
             Tick("Seize on suspension", "Contact", "SeizeOnSuspension",
                  () => _cfg.SeizeOnSuspension, v => _cfg.SeizeOnSuspension = v,
                  "Locked against you, not removed. Back when the licence is");
@@ -716,10 +723,10 @@ namespace Precinct88.UI
             Screen.Text("licence " + Ticketing.Standing(_licence), left, y, NoteScale,
                         _licence != null && _licence.IsSuspended ? Warn : Dim);
 
-            if (_licence != null && _licence.Owed > 0)
+            if (_tickets != null && _tickets.Owing)
             {
-                Screen.Text("owed $" + _licence.Owed.ToString("N0", CultureInfo.InvariantCulture),
-                            right, y, NoteScale, Faint, rightAligned: true);
+                Screen.Text("owed " + Tickets.Money(_tickets.Owed),
+                            right, y, NoteScale, Warn, rightAligned: true);
             }
 
             y += 0.021f;
