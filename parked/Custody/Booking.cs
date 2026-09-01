@@ -10,7 +10,7 @@ using Precinct88.UI;
 
 namespace Precinct88.Custody
 {
-    internal enum Held
+    internal enum Detention
     {
         No,
 
@@ -59,7 +59,7 @@ namespace Precinct88.Custody
         private readonly Manhunt _hunt;
         private readonly Witness _witness;
 
-        private Held _at = Held.No;
+        private Detention _at = Detention.No;
         private Ped _officer;
         private Vehicle _car;
         private Station _to;
@@ -116,10 +116,10 @@ namespace Precinct88.Custody
             _witness = witness;
         }
 
-        public bool Running => _at != Held.No;
+        public bool Running => _at != Detention.No;
 
         /// <summary>Whether the player is under the mod's control and nothing else should act.</summary>
-        public bool InCustody => _at == Held.Cuffed || _at == Held.Riding || _at == Held.Inside;
+        public bool InCustody => _at == Detention.Cuffed || _at == Detention.Riding || _at == Detention.Inside;
 
         // ---- starting ----------------------------------------------------------
 
@@ -182,9 +182,9 @@ namespace Precinct88.Custody
                 Log.Debug("Could not cuff: " + ex.Message);
             }
 
-            _at = _cfg.WalkToTheCar && Cops.Alive(officer) ? Held.Cuffed : Held.Inside;
+            _at = _cfg.WalkToTheCar && Cops.Alive(officer) ? Detention.Cuffed : Detention.Inside;
 
-            if (_at == Held.Inside) _outAt = Game.GameTime + Wait();
+            if (_at == Detention.Inside) _outAt = Game.GameTime + Wait();
 
             Screen.Ticker("Under arrest: " + _reason + ".");
             Log.Info("Booked for " + _reason + ", taken to " + (_to == null ? "?" : _to.Name) + ".");
@@ -219,9 +219,9 @@ namespace Precinct88.Custody
 
             switch (_at)
             {
-                case Held.Cuffed: Walking(me, now); break;
-                case Held.Riding: Riding(me, now); break;
-                case Held.Inside: Inside(me, now); break;
+                case Detention.Cuffed: Walking(me, now); break;
+                case Detention.Riding: Riding(me, now); break;
+                case Detention.Inside: Inside(me, now); break;
             }
         }
 
@@ -241,7 +241,7 @@ namespace Precinct88.Custody
             {
                 // Lost the escort. Rather than leave the player cuffed in the street forever,
                 // the booking carries on without the journey.
-                Go(Held.Inside, now);
+                Go(Detention.Inside, now);
                 _outAt = now + Wait();
                 return;
             }
@@ -250,7 +250,7 @@ namespace Precinct88.Custody
 
             if (!Cops.Alive(_car))
             {
-                Go(Held.Inside, now);
+                Go(Detention.Inside, now);
                 _outAt = now + Wait();
                 return;
             }
@@ -298,7 +298,7 @@ namespace Precinct88.Custody
                 Log.Debug("Could not put the player in the car: " + ex.Message);
             }
 
-            Go(Held.Riding, now);
+            Go(Detention.Riding, now);
         }
 
         private void Riding(Ped me, int now)
@@ -310,7 +310,7 @@ namespace Precinct88.Custody
 
             if (now - _phaseAt < RideMs) return;
 
-            Go(Held.Inside, now);
+            Go(Detention.Inside, now);
             _outAt = now + Wait();
         }
 
@@ -337,7 +337,7 @@ namespace Precinct88.Custody
 
             Screen.Line(_to == null ? "IN CUSTODY" : _to.Name.ToUpperInvariant() + " STATION",
                         0.40f, 0.9f);
-            Screen.Line("Held for " + _reason, 0.47f, 0.5f, 200);
+            Screen.Line("Detention for " + _reason, 0.47f, 0.5f, 200);
 
             if (left > 0)
             {
@@ -419,7 +419,7 @@ namespace Precinct88.Custody
 
             _officer = null;
             _car = null;
-            _at = Held.No;
+            _at = Detention.No;
             _blacked = false;
 
             // LAST, AND ALWAYS. Every path out of a booking comes through here, including
@@ -504,7 +504,7 @@ namespace Precinct88.Custody
 
         // ---- the rest ----------------------------------------------------------
 
-        private void Go(Held next, int now)
+        private void Go(Detention next, int now)
         {
             _at = next;
             _phaseAt = now;

@@ -177,7 +177,7 @@ namespace Precinct88.UI
                  "Checked once at load", live: false);
 
             Head("Patrol");
-            Tick("Beat patrol", "Patrol", "Enabled",
+            Tick("Patrol cars", "Patrol", "Enabled",
                  () => _cfg.PatrolEnabled, v => _cfg.PatrolEnabled = v,
                  "Cars out because the beat exists, not because of you");
             Slide("Units at once", "Patrol", "Units",
@@ -189,8 +189,8 @@ namespace Precinct88.UI
             Tick("Own dispatch only", "Patrol", "OwnDispatch",
                  () => _cfg.OwnDispatch, v => _cfg.OwnDispatch = v,
                  "No car is ever created because of your stars. THE setting");
-            Slide("Minutes on a beat", "Patrol", "BeatMinutes",
-                  () => _cfg.BeatMinutes, v => _cfg.BeatMinutes = v, 1f, 60f, 1f, "0", "m");
+            Slide("Minutes on patrol", "Patrol", "PatrolMinutes",
+                  () => _cfg.PatrolMinutes, v => _cfg.PatrolMinutes = v, 1f, 60f, 1f, "0", "m");
             Tick("Dispatch failsafe", "Patrol", "DispatchFailsafe",
                  () => _cfg.DispatchFailsafe, v => _cfg.DispatchFailsafe = v,
                  "Off: slow arrival is the design, not a fault");

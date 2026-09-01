@@ -90,7 +90,7 @@ namespace Precinct88.Streets
         public Duty Doing = Duty.Rolling;
 
         /// <summary>The district this unit was put out to cover.</summary>
-        public District Beat;
+        public District Patch;
 
         /// <summary>Where it is headed, and whether it stops when it gets there.</summary>
         public Vector3 Target;
@@ -136,7 +136,7 @@ namespace Precinct88.Streets
         /// Interest -- so being stopped twice by the same crew feels like being stopped twice
         /// by the same crew, rather than by a dice roll wearing a uniform.
         /// </summary>
-        public Contact.Temper Temper = Contact.Temper.Normal;
+        public Temper Temper = Temper.Normal;
 
         private Vector3 _wasAt;
         private int _lookedAt;

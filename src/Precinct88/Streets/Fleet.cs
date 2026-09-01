@@ -39,7 +39,7 @@ namespace Precinct88.Streets
         private const int GapMinMs = 24000;
         private const int GapMaxMs = 70000;
 
-        /// <summary>And how long during a response, when the beat rhythm is the wrong one.</summary>
+        /// <summary>And how long during a response, when the patch rhythm is the wrong one.</summary>
         private const int SurgeGapMs = 3500;
 
         /// <summary>How long a unit sits somewhere watching a street.</summary>
@@ -49,7 +49,7 @@ namespace Precinct88.Streets
         /// <summary>Chance the next place it heads for is somewhere it stops.</summary>
         private const int StopChancePercent = 38;
 
-        /// <summary>How far a beat leg is. Short enough to stay in the district.</summary>
+        /// <summary>How far a patch leg is. Short enough to stay in the district.</summary>
         private const float LegMin = 120f;
         private const float LegMax = 320f;
 
@@ -72,16 +72,16 @@ namespace Precinct88.Streets
         private int _failures;
 
         /// <summary>
-        /// Whether something louder is happening and the beat should stop producing cars.
+        /// Whether something louder is happening and the patch should stop producing cars.
         ///
         /// Wired by Main from whatever is going on: a chase, a scene, a mod on the bridge that
-        /// has said it is running something. A beat car easing round the corner into a gang war
+        /// has said it is running something. A patch car easing round the corner into a gang war
         /// is not atmosphere, it is two officers walking into a firefight they were not sent to.
         /// </summary>
         public Func<bool> Busy;
 
         /// <summary>
-        /// Extra units wanted right now, on top of the district's ordinary beat.
+        /// Extra units wanted right now, on top of the district's ordinary patch.
         ///
         /// WITH THE ENGINE'S DISPATCH SWITCHED OFF, THIS IS THE ONLY WAY ANYBODY COMES. That is
         /// the trade the mod makes: the game will no longer conjure a car behind you, so when a
@@ -126,7 +126,7 @@ namespace Precinct88.Streets
 
             // NOTHING NEW GOES OUT WHILE THE LAW IS HELD, and this one line is most of how the
             // other mod gets what it needs without a single call. Hoodrich holds the law for a
-            // gang war, a bike ride, a raid -- and a beat car easing round the corner into a
+            // gang war, a bike ride, a raid -- and a patch car easing round the corner into a
             // firefight it was not sent to is two officers walking into somebody else's scene.
             //
             // Cars already out are left where they are. They are not deleted, because a squad
@@ -160,7 +160,7 @@ namespace Precinct88.Streets
             // many".
             if (n < 1) n = 1;
 
-            // The surge sits ON TOP of the beat rather than replacing it, so a chase does not
+            // The surge sits ON TOP of the patch rather than replacing it, so a chase does not
             // empty the surrounding streets of the ordinary patrol -- which would be the most
             // obvious possible tell that the police in this game are a budget rather than a
             // force.
@@ -241,7 +241,7 @@ namespace Precinct88.Streets
         }
 
         /// <summary>
-        /// Somewhere else on the beat.
+        /// Somewhere else on the patch.
         ///
         /// Biased towards staying in its own district, but not forced to -- a car that can only
         /// ever be inside a zone boundary drives in circles at the edges, and real beats
@@ -261,12 +261,12 @@ namespace Precinct88.Streets
             // patrol car goes at two in the morning and not at two in the afternoon. A floor
             // under it keeps a bit of it happening in daylight, so the behaviour is not a
             // thing players only ever hear about.
-            var beat = unit.Beat ?? Districts.At(from);
+            var patch = unit.Patch ?? Districts.At(from);
 
-            var bias = beat.Alleys * (0.25f + 0.75f * Alleys.Night()) * _cfg.AlleyPatrol;
+            var bias = patch.Alleys * (0.25f + 0.75f * Alleys.Night()) * _cfg.AlleyPatrol;
             var wantAlley = _rng.NextDouble() < bias;
 
-            if (Alleys.Find(from, LegMin, LegMax, wantAlley, unit.Beat, _rng, out next))
+            if (Alleys.Find(from, LegMin, LegMax, wantAlley, unit.Patch, _rng, out next))
             {
                 unit.OnABackStreet = wantAlley;
                 return true;
@@ -299,19 +299,19 @@ namespace Precinct88.Streets
         private void TryPutOneOut(Vector3 playerAt, int now)
         {
             // A SURGE CANNOT WAIT SEVENTY SECONDS FOR THE NEXT CAR. The ordinary gap is the
-            // rhythm of a beat, which is exactly wrong for a response -- with the engine's
+            // rhythm of a patch, which is exactly wrong for a response -- with the engine's
             // dispatch off, a slow gap here is a five-star manhunt where nobody turns up.
             _nextSpawn = Surging
                 ? now + SurgeGapMs + _rng.Next(SurgeGapMs)
                 : now + GapMinMs + _rng.Next(GapMaxMs - GapMinMs);
 
-            var beat = Districts.At(playerAt);
-            if (beat.Density <= 0f) return;
+            var patch = Districts.At(playerAt);
+            if (patch.Density <= 0f) return;
 
             Vector3 spot;
             float heading;
 
-            if (!SpawnPoint(playerAt, beat, out spot, out heading))
+            if (!SpawnPoint(playerAt, patch, out spot, out heading))
             {
                 // FAILING COST A FULL COOLDOWN, and that was most of the bug. On open ground --
                 // the Chamberlain Hills tram straight, a freeway, anywhere with a long sightline
@@ -337,15 +337,15 @@ namespace Precinct88.Streets
 
             _failures = 0;
 
-            var unit = Make(spot, heading, beat, now);
+            var unit = Make(spot, heading, patch, now);
             if (unit == null) return;
 
             _out.Add(unit);
-            unit.Beat = beat;
+            unit.Patch = patch;
 
             if (Surging && SurgeTo != Vector3.Zero)
             {
-                // Straight to the call. It was not on a beat and never pretended to be -- this
+                // Straight to the call. It was not on a patch and never pretended to be -- this
                 // is a unit answering something, which is what a response is.
                 unit.RespondTo(SurgeTo, "a call");
 
@@ -358,7 +358,7 @@ namespace Precinct88.Streets
             unit.Roll(NextLeg(unit, playerAt, out first) ? first : playerAt,
                       _rng.Next(100) < StopChancePercent);
 
-            Log.Debug("Unit out on the " + beat.Name + " beat (" + _out.Count + " on the road).");
+            Log.Debug("Unit out on the " + patch.Name + " patch (" + _out.Count + " on the road).");
         }
 
         /// <summary>
@@ -369,14 +369,14 @@ namespace Precinct88.Streets
         /// node out of sight behind him, which is the ordinary compromise -- but it is at least
         /// a road, at a sensible distance, and facing the way the road goes.
         /// </summary>
-        private bool SpawnPoint(Vector3 playerAt, District beat, out Vector3 spot, out float heading)
+        private bool SpawnPoint(Vector3 playerAt, District patch, out Vector3 spot, out float heading)
         {
             spot = Vector3.Zero;
             heading = 0f;
 
             if (_cfg.FromStations)
             {
-                var station = Stations.For(beat, playerAt);
+                var station = Stations.For(patch, playerAt);
 
                 if (station != null)
                 {
@@ -430,7 +430,7 @@ namespace Precinct88.Streets
 
                 // AND NOT ON TOP OF SOMEBODY ELSE'S SCENE. Another mod's callout, a scripted
                 // roadblock, an ambulance at a crash -- all of them put emergency vehicles
-                // somewhere deliberate, and a beat car materialising into the middle of one is
+                // somewhere deliberate, and a patch car materialising into the middle of one is
                 // this mod damaging a scene it cannot see.
                 if (EmergencyNear(spot)) continue;
 
@@ -488,13 +488,13 @@ namespace Precinct88.Streets
             }
         }
 
-        private Unit Make(Vector3 spot, float heading, District beat, int now)
+        private Unit Make(Vector3 spot, float heading, District patch, int now)
         {
             try
             {
                 // WHO POLICES HERE, rather than one cruiser everywhere. A sheriff in Blaine
                 // County, highway patrol on the freeway, a ranger on the mountain.
-                var force = Agencies.For(beat, spot, _rng);
+                var force = Agencies.For(patch, spot, _rng);
 
                 var wantCar = force.Car(_rng);
                 if (wantCar == null) return null;
@@ -513,14 +513,14 @@ namespace Precinct88.Streets
                 var unit = new Unit
                 {
                     Car = car,
-                    Beat = beat,
+                    Patch = patch,
                     Force = force.Name,
-                    OffDutyAt = now + (int)(_cfg.BeatMinutes * 60000f),
+                    OffDutyAt = now + (int)(_cfg.PatrolMinutes * 60000f),
 
                     // Rolled once and kept. Two officers who look at everybody, or two who
                     // look at nobody, for the whole of their round.
                     Interest = (float)_rng.NextDouble(),
-                    Temper = Contact.Ticketing.TemperFor(_rng),
+                    Temper = Temperament.Roll(_rng),
                 };
 
                 // Two of them. One officer in a squad car is a mod that could not be bothered,

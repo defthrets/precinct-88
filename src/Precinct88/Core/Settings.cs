@@ -128,7 +128,7 @@ namespace Precinct88.Core
         public bool DispatchFailsafe = false;
 
         /// <summary>Minutes before a unit has finished its round and goes home.</summary>
-        public float BeatMinutes = 11f;
+        public float PatrolMinutes = 11f;
 
         /// <summary>
         /// How much patrolling goes down the backs of things, over the district figure.
@@ -400,7 +400,8 @@ namespace Precinct88.Core
                 s.PatrolUnits = (int)Clamp(ini.GetInt("Patrol", "Units", s.PatrolUnits), 0f, 12f);
                 s.SuppressVanillaPatrols = ini.GetBool("Patrol", "SuppressVanillaPatrols",
                                                        s.SuppressVanillaPatrols);
-                s.BeatMinutes = Clamp(ini.GetFloat("Patrol", "BeatMinutes", s.BeatMinutes), 1f, 60f);
+                s.PatrolMinutes = Clamp(ini.GetFloat("Patrol", "PatrolMinutes",
+                                                      ini.GetFloat("Patrol", "BeatMinutes", s.PatrolMinutes)), 1f, 60f);
                 s.FromStations = ini.GetBool("Patrol", "FromStations", s.FromStations);
                 s.OwnDispatch = ini.GetBool("Patrol", "OwnDispatch", s.OwnDispatch);
                 s.DispatchFailsafe = ini.GetBool("Patrol", "DispatchFailsafe", s.DispatchFailsafe);

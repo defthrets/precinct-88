@@ -9,18 +9,6 @@ using Precinct88.UI;
 namespace Precinct88.Contact
 {
     /// <summary>How the two in the car are about their job today.</summary>
-    internal enum Temper
-    {
-        /// <summary>Goes by the book, more or less.</summary>
-        Normal,
-
-        /// <summary>Writes it up. Higher fine, and unlikely to let you off.</summary>
-        Strict,
-
-        /// <summary>Would rather not do the paperwork.</summary>
-        Lenient,
-    }
-
     /// <summary>
     /// What a traffic stop actually ends in.
     ///
@@ -69,16 +57,6 @@ namespace Precinct88.Contact
         private const int NeverWarnAbove = 2;
 
         /// <summary>Rolled per unit and kept, so one crew behaves consistently.</summary>
-        public static Temper TemperFor(Random rng)
-        {
-            var roll = rng.Next(100);
-
-            if (roll < 25) return Temper.Strict;
-            if (roll < 50) return Temper.Lenient;
-
-            return Temper.Normal;
-        }
-
         /// <summary>
         /// Decides and applies the outcome, and says what happened.
         ///

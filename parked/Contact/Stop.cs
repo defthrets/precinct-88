@@ -47,7 +47,7 @@ namespace Precinct88.Contact
         Dog,
     }
 
-    internal enum Beat
+    internal enum Phase
     {
         None,
 
@@ -137,7 +137,7 @@ namespace Precinct88.Contact
 
         private Unit _unit;
         private Ped _officer;
-        private Beat _at = Beat.None;
+        private Phase _at = Phase.None;
         private Why _why;
 
         /// <summary>
@@ -221,7 +221,7 @@ namespace Precinct88.Contact
             _hunt = hunt;
         }
 
-        public bool Running => _at != Beat.None && _at != Beat.Done;
+        public bool Running => _at != Phase.None && _at != Phase.Done;
 
         /// <summary>The unit tied up in this, so nothing else re-tasks it.</summary>
         public Unit Busy => Running ? _unit : null;
@@ -274,7 +274,7 @@ namespace Precinct88.Contact
                        : Shape.Dog;
             }
 
-            _at = inCar ? Beat.Pulling : Beat.Approaching;
+            _at = inCar ? Phase.Pulling : Phase.Approaching;
 
             if (inCar)
             {
@@ -339,7 +339,7 @@ namespace Precinct88.Contact
             // Anything louder has taken over -- a shooting, another mod's scene, a hold. The
             // stop is not the important thing any more and should get out of the way rather
             // than keep an officer stood in the middle of it.
-            if (LawHold.Held || _hunt.Running && _at != Beat.Searching)
+            if (LawHold.Held || _hunt.Running && _at != Phase.Searching)
             {
                 End("something bigger happened", false);
                 return;
@@ -347,11 +347,11 @@ namespace Precinct88.Contact
 
             switch (_at)
             {
-                case Beat.Pulling: Pulling(me, now); break;
-                case Beat.WaitingForYou: Waiting(me, now); break;
-                case Beat.Approaching: Approaching(me, now); break;
-                case Beat.Talking: Talking(me, now); break;
-                case Beat.Searching: Searching(me, now); break;
+                case Phase.Pulling: Pulling(me, now); break;
+                case Phase.WaitingForYou: Waiting(me, now); break;
+                case Phase.Approaching: Approaching(me, now); break;
+                case Phase.Talking: Talking(me, now); break;
+                case Phase.Searching: Searching(me, now); break;
             }
         }
 
@@ -370,7 +370,7 @@ namespace Precinct88.Contact
             if (!Cops.Alive(car) || car.Driver == null || car.Driver.Handle != me.Handle)
             {
                 // Got out on his own, which is compliance of a sort.
-                Go(Beat.Approaching, now);
+                Go(Phase.Approaching, now);
                 return;
             }
 
@@ -383,7 +383,7 @@ namespace Precinct88.Contact
                 Log.Debug("Could not follow for the stop: " + ex.Message);
             }
 
-            Go(Beat.WaitingForYou, now);
+            Go(Phase.WaitingForYou, now);
         }
 
         private void Waiting(Ped me, int now)
@@ -401,7 +401,7 @@ namespace Precinct88.Contact
                 }
                 catch { /* it is about to be re-tasked */ }
 
-                Go(Beat.Approaching, now);
+                Go(Phase.Approaching, now);
                 return;
             }
 
@@ -450,7 +450,7 @@ namespace Precinct88.Contact
 
             if (gap < (window.HasValue ? AtTheWindow : TalkRange))
             {
-                Go(Beat.Talking, now);
+                Go(Phase.Talking, now);
                 return;
             }
 
@@ -524,7 +524,7 @@ namespace Precinct88.Contact
                 Anim.Play(me, Anim.HandsUpDict, Anim.HandsUpClip, 49);
 
                 _searchDone = now + SearchMs;
-                Go(Beat.Searching, now);
+                Go(Phase.Searching, now);
                 return;
             }
 
@@ -554,7 +554,7 @@ namespace Precinct88.Contact
                 Anim.Play(me, Anim.HandsUpDict, Anim.HandsUpClip, 49);
 
                 _searchDone = now + SearchMs;
-                Go(Beat.Searching, now);
+                Go(Phase.Searching, now);
             }
 
             // Standing there doing nothing is not refusal. Eventually he gets bored, which is
@@ -628,7 +628,7 @@ namespace Precinct88.Contact
                 {
                     // Let go mid-search. Not an escape, just back to the conversation.
                     Anim.Stop(me, Anim.HandsUpDict, Anim.HandsUpClip);
-                    Go(Beat.Talking, now);
+                    Go(Phase.Talking, now);
                     return;
                 }
 
@@ -901,7 +901,7 @@ namespace Precinct88.Contact
             }
         }
 
-        private void Go(Beat next, int now)
+        private void Go(Phase next, int now)
         {
             _at = next;
             _phaseAt = now;
@@ -916,7 +916,7 @@ namespace Precinct88.Contact
         /// </summary>
         public void End(string why, bool clean)
         {
-            if (_at == Beat.None) return;
+            if (_at == Phase.None) return;
 
             Log.Info("Stop ended: " + why + ".");
 
@@ -958,7 +958,7 @@ namespace Precinct88.Contact
                 }
             }
 
-            _at = Beat.None;
+            _at = Phase.None;
             _shape = Shape.Ticket;
             _unit = null;
             _officer = null;
