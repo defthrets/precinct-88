@@ -41,6 +41,8 @@ namespace Precinct88
         private readonly Foot _foot;
         private readonly Markers _markers;
         private readonly Spotlight _beam;
+        private readonly Notice _notice;
+        private readonly Callout _callout;
 
         private bool _parked;
         private bool _standDown;
@@ -70,6 +72,8 @@ namespace Precinct88
                 _foot = new Foot(_cfg);
                 _markers = new Markers(_cfg, _fleet, _foot);
                 _beam = new Spotlight(_cfg, _fleet);
+                _notice = new Notice(_cfg, _fleet, _foot);
+                _callout = new Callout(_cfg, _fleet);
 
                 Wire();
 
@@ -81,6 +85,7 @@ namespace Precinct88
                          "Patrol build: cars and officers only. " +
                          "Patrol " + OnOff(_cfg.PatrolEnabled) +
                          ", foot " + OnOff(_cfg.FootPatrols) +
+                         ", response " + OnOff(_cfg.RespondToCrime) +
                          ", blips " + OnOff(_cfg.PoliceBlips) +
                          ", suppression " + OnOff(_cfg.SuppressVanillaPatrols) + ".");
             }
@@ -108,6 +113,14 @@ namespace Precinct88
             // every system that gets ported back plugs into, so it stays.
             _fleet.Busy = () => _standDown;
             _foot.Busy = () => _standDown;
+
+            // What an officer saw goes to whoever decides who attends. Notice knows nothing
+            // about units and Callout knows nothing about eyesight, which is the whole reason
+            // they are two files.
+            _notice.Report = _callout.Report;
+
+            // The call talks; it does not draw.
+            _callout.Say = Screen.Ticker;
         }
 
         /// <summary>
@@ -145,20 +158,30 @@ namespace Precinct88
 
             try
             {
-                // 1. THE CARS. Everything else in this build is a consequence of where they
-                //    are, so they move first and the rest of the tick reads the result.
+                // 1. WHAT AN OFFICER JUST SAW, before anything acts on it. It reads the
+                //    world and the officers already in it, and changes neither.
+                _notice.Update();
+
+                // 2. And who goes. BEFORE the fleet, because this sets the surge and where a
+                //    surged car heads, and Fleet reads both on its own tick -- setting them
+                //    afterwards means every response is one tick stale, which at 750ms is
+                //    survivable and at a bad frame rate is not.
+                _callout.Update();
+
+                // 3. THE CARS. Everything else in this build is a consequence of where they
+                //    are, so they move next and the rest of the tick reads the result.
                 _fleet.Update();
 
-                // 2. Officers who are not in a car. Independent of the fleet -- they are
-                //    placed by district, not spawned out of it -- but second because a
+                // 4. Officers who are not in a car. Independent of the fleet -- they are
+                //    placed by district, not spawned out of it -- but after it because a
                 //    walker and a car in the same street should be the car's street.
                 _foot.Update();
 
-                // 3. After both, so a unit that has just gone out is marked on the same tick
+                // 5. After both, so a unit that has just gone out is marked on the same tick
                 //    it exists rather than a second later.
                 _markers.Update();
 
-                // 4. The vanilla generator, held off every tick because the game keeps
+                // 6. The vanilla generator, held off every tick because the game keeps
                 //    switching it back on. See AmbientCops -- this is a lapse that looks
                 //    exactly like a mod that never worked.
                 if (_cfg.PatrolEnabled && _cfg.SuppressVanillaPatrols)
@@ -166,7 +189,7 @@ namespace Precinct88
                     AmbientCops.Hold(_cfg.OwnDispatch);
                 }
 
-                // 5. EVERY FRAME, and that is the point of it being here rather than on a
+                // 7. EVERY FRAME, and that is the point of it being here rather than on a
                 //    tick of its own. The fleet ticks at 750ms and a light drawn at that rate
                 //    is a strobe.
                 if (_beam != null) _beam.Draw();
@@ -214,6 +237,10 @@ namespace Precinct88
         {
             try
             {
+                // Units off the call and back on patrol FIRST, so nothing is left driving
+                // to somewhere with its lights on while the rest of this runs.
+                if (_callout != null) _callout.Clear("the mod is unloading");
+
                 // The generator back on before the cars go, so the streets are not empty of
                 // police for the gap between this and whatever loads next.
                 AmbientCops.Release();

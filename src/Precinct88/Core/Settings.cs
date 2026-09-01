@@ -103,6 +103,14 @@ namespace Precinct88.Core
         public float CrimeSceneMinutes = 5f;
 
         /// <summary>
+        /// Whether the police react to what they see you doing.
+        ///
+        /// Not the wanted system -- this is officers noticing a burnout, a gun in the street,
+        /// a car on the pavement, and driving over to look. No stars are given by any of it.
+        /// </summary>
+        public bool RespondToCrime = true;
+
+        /// <summary>
         /// Officers who are not in a car.
         ///
         /// Every other officer in the mod is inside a vehicle, which quietly meant a stop could
@@ -110,7 +118,7 @@ namespace Precinct88.Core
         /// </summary>
         public bool FootPatrols = true;
 
-        /// <summary>How many walk a beat at once, before the district weighting.</summary>
+        /// <summary>How many walk a round at once, before the district weighting.</summary>
         public int FootUnits = 2;
 
         /// <summary>
@@ -408,6 +416,7 @@ namespace Precinct88.Core
                 s.CrimeScenes = ini.GetBool("Patrol", "CrimeScenes", s.CrimeScenes);
                 s.CrimeSceneMinutes = Clamp(ini.GetFloat("Patrol", "CrimeSceneMinutes",
                                                          s.CrimeSceneMinutes), 0.5f, 30f);
+                s.RespondToCrime = ini.GetBool("Patrol", "RespondToCrime", s.RespondToCrime);
                 s.FootPatrols = ini.GetBool("Patrol", "FootPatrols", s.FootPatrols);
                 s.FootUnits = (int)Clamp(ini.GetInt("Patrol", "FootUnits", s.FootUnits), 0f, 8f);
                 s.AlleyPatrol = Clamp(ini.GetFloat("Patrol", "AlleyPatrol", s.AlleyPatrol), 0f, 2f);

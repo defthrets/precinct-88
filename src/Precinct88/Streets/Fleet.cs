@@ -176,7 +176,17 @@ namespace Precinct88.Streets
 
                 var keep = unit.Update(at, _rng);
 
-                if (keep && unit.Doing != Duty.Contact &&
+                // NOT ONE THAT IS ON ITS WAY. A unit answering a call is by definition
+                // driving towards the player, so measuring it against a let-go range and
+                // deleting it for being far away destroys exactly the car that was doing the
+                // thing the mod exists to do -- and it happens silently, so the symptom is
+                // "sometimes nobody ever arrives" with nothing in the log.
+                //
+                // They are not kept forever: a call goes cold, the unit is put back on patrol,
+                // and the next pass lets it go normally.
+                var onIts = unit.Doing == Duty.Responding || unit.Doing == Duty.Searching;
+
+                if (keep && unit.Doing != Duty.Contact && !onIts &&
                     unit.Car.Position.DistanceTo(at) > LetGoRange)
                 {
                     keep = false;
