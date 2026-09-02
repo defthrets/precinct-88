@@ -18,8 +18,11 @@ namespace Precinct88.Custody
         /// <summary>He has hold of you. Cuffs going on.</summary>
         Cuffing,
 
-        /// <summary>Turning out your pockets.</summary>
+        /// <summary>Turning out your pockets. One star only.</summary>
         Turning,
+
+        /// <summary>Cuffed at two stars, and being handed to the engine for the cell.</summary>
+        Booking,
     }
 
     /// <summary>
@@ -92,6 +95,16 @@ namespace Precinct88.Custody
 
         /// <summary>And how long the search itself takes once they are on.</summary>
         private const int SearchMs = 4200;
+
+        /// <summary>
+        /// How long to wait for the engine to take him off our hands at two stars.
+        ///
+        /// The bust is the game's, not ours -- once the arrest block comes off and an officer
+        /// is stood on top of a wanted man, it happens on its own. This is only here so that a
+        /// bust which does not arrive for some reason leaves a player free rather than kneeling
+        /// in handcuffs waiting for a fade that is never coming.
+        /// </summary>
+        private const int BookingMs = 7000;
 
         /// <summary>Moving faster than this and you are not waiting, you are going.</summary>
         private const float StillSpeed = 2.2f;
@@ -174,8 +187,16 @@ namespace Precinct88.Custody
             {
                 var stars = Game.Player.Wanted.WantedLevel;
 
-                // THE WHOLE REASON ONE STAR CAN END ANY OTHER WAY. Every frame, no gate.
-                if (stars == 1)
+                // THE WHOLE REASON ONE STAR CAN END ANY OTHER WAY, and every frame, no gate --
+                // it is a this-frame flag and the frames a gate misses are the frames the
+                // engine uses to bust you.
+                //
+                // AT TWO STARS IT IS HELD OFF ONLY WHILE THE SCENE RUNS. Two stars is supposed
+                // to end in a cell, so the bust is wanted -- but not before he has walked over
+                // and put the cuffs on, or the whole thing is a fade to black from across the
+                // road again. The moment the cuffs are on, the block comes off and the engine
+                // does what it was always going to do.
+                if (stars == 1 || (stars == 2 && Running && _at != Detain.Booking))
                 {
                     Function.Call(Hash.PREVENT_ARREST_STATE_THIS_FRAME, true);
                 }
@@ -193,7 +214,7 @@ namespace Precinct88.Custody
 
                 if (Running) { Held(me, now, stars); return; }
 
-                if (stars != 1) return;
+                if (stars < 1 || stars > 2) return;
                 if (now < _overAt) return;
 
                 Consider(me, now);
@@ -257,9 +278,9 @@ namespace Precinct88.Custody
 
         private void Held(Ped me, int now, int stars)
         {
-            // It stopped being this the moment it stopped being one star. Whatever you just
-            // did, the officer has bigger problems.
-            if (stars != 1) { Stop("it escalated"); return; }
+            // Three stars is a different evening entirely -- they have their sidearms back
+            // and nobody is putting cuffs on anybody. Zero means it resolved itself.
+            if (stars < 1 || stars > 2) { Stop("it escalated"); return; }
 
             if (!Cops.Alive(_officer)) { Stop("the officer is gone"); return; }
 
@@ -276,6 +297,7 @@ namespace Precinct88.Custody
                 case Detain.Coming: Coming(me, now, apart); return;
                 case Detain.Cuffing: Cuffing(me, now, apart); return;
                 case Detain.Turning: Turning(me, now, apart, since); return;
+                case Detain.Booking: Booking(me, now); return;
             }
         }
 
@@ -359,11 +381,32 @@ namespace Precinct88.Custody
 
             if (now - _phaseAt < CuffMs) return;
 
-            _at = Detain.Turning;
             _phaseAt = now;
             _lastProgressAt = now;
 
-            Dialogue.Say("Officer", "Anything on you I should know about?", SearchMs);
+            // ONE STAR IS A SEARCH. TWO IS A CELL. Same walk over, same cuffs, same animation
+            // -- and that is the point of running the scene at both levels rather than only at
+            // one. What changes is what is at the end of it, which is the thing the player is
+            // actually being taught: at one star you lose what you were carrying, at two you
+            // lose the evening.
+            if (Game.Player.Wanted.WantedLevel <= 1)
+            {
+                _at = Detain.Turning;
+
+                Dialogue.Say("Officer", "Anything on you I should know about?", SearchMs);
+                return;
+            }
+
+            _at = Detain.Booking;
+
+            Dialogue.Say("Officer", "You are under arrest. Watch your head.", BookingMs);
+
+            // AND THE POLICE CAN HAVE HIM BACK. Held off for the walk over and the cuffs so
+            // that neither got interrupted; released now, because the arrest is the outcome
+            // rather than something to be protected from.
+            Response.LawHold.Ignore(false);
+
+            Log.Info("Cuffed at two stars; handing over for the bust.");
         }
 
         /// <summary>Going through your pockets.</summary>
@@ -389,6 +432,27 @@ namespace Precinct88.Custody
             }
 
             Done(me);
+        }
+
+        /// <summary>
+        /// Cuffed at two stars, waiting for the game to take him.
+        ///
+        /// THE BUST IS THE ENGINE'S AND ALWAYS WAS. With the arrest block off and an officer
+        /// stood on top of a wanted man, it fires on its own -- there is no native for "arrest
+        /// me now" worth trusting, and the engine's own version already does the fade, the fee
+        /// and the station. All this does is hold the pose until it happens.
+        ///
+        /// The timeout is the point of the state existing at all. If the bust does not arrive
+        /// -- he backed into geometry, the officer died, something else took the wanted level
+        /// away -- the player must end up free and uncuffed rather than kneeling in the road
+        /// waiting for a fade that is never coming.
+        /// </summary>
+        private void Booking(Ped me, int now)
+        {
+            Screen.Help("Under arrest.");
+            Pose(me);
+
+            if (now - _phaseAt > BookingMs) Stop("the bust never came");
         }
 
         /// <summary>

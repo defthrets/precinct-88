@@ -140,6 +140,8 @@ namespace Precinct88.Response
                 // second and a half, which is not a takedown, it is a stumble.
                 Function.Call(Hash.SET_PED_MIN_GROUND_TIME_FOR_STUNGUN, who.Handle, GroundTimeMs);
 
+                Close(who, true);
+
                 _stunned.Add(who.Handle);
             }
             catch (Exception ex)
@@ -159,10 +161,60 @@ namespace Precinct88.Response
                 who.Weapons.Give(WeaponHash.Pistol, 250, true, true);
 
                 Function.Call(Hash.SET_PED_DROPS_WEAPONS_WHEN_DEAD, who.Handle, true);
+
+                Close(who, false);
             }
             catch (Exception ex)
             {
                 Log.Debug("Could not give a sidearm back: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Whether he closes the distance or holds off and shoots.
+        ///
+        /// THE HALF THE STUN GUNS WERE MISSING, and without it the whole idea failed in the
+        /// most literal way possible: officers were given a weapon that works at three metres
+        /// and left on the combat behaviour for one that works at forty. So they did exactly
+        /// what they were told -- took position behind their cars, held the range, and fired
+        /// tasers across a road at somebody they were never going to hit.
+        ///
+        /// Four settings and they are all the same instruction said four ways.
+        ///
+        /// COMBAT MOVEMENT 2 is "will advance". The default has them hold ground and shoot,
+        /// which is correct for a pistol and useless for this.
+        ///
+        /// COMBAT RANGE 0 is "near" -- how far off he is willing to settle and start
+        /// shooting. On the default he stops at the range the pistol wanted.
+        ///
+        /// NO COVER. Attribute 0 is CA_USE_COVER, and a man taking cover from somebody he
+        /// intends to lay hands on is a man who has misunderstood his job. It is also what
+        /// pinned them to their cars in the first place.
+        ///
+        /// AND OUT OF THE CAR. Attribute 3 is CA_LEAVE_VEHICLES: you cannot tase anybody
+        /// through a windscreen.
+        ///
+        /// All four are put back when they get their sidearms, because holding the range is
+        /// the RIGHT behaviour with a pistol and walking calmly towards an armed man to grab
+        /// him is not.
+        /// </summary>
+        private static void Close(Ped who, bool near)
+        {
+            try
+            {
+                Function.Call(Hash.SET_PED_COMBAT_MOVEMENT, who.Handle, near ? 2 : 1);
+                Function.Call(Hash.SET_PED_COMBAT_RANGE, who.Handle, near ? 0 : 1);
+
+                Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, who.Handle, 0, !near);
+                Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, who.Handle, 3, true);
+
+                // He has to be able to see far enough to decide to start walking. The default
+                // is generous already; this only matters at the top of the range.
+                Function.Call(Hash.SET_PED_SEEING_RANGE, who.Handle, near ? 70f : 100f);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Could not set how an officer closes: " + ex.Message);
             }
         }
 
