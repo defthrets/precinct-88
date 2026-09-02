@@ -1,8 +1,10 @@
 using System;
 using System.IO;
 using GTA;
+using Precinct88.Api;
 using Precinct88.Contact;
 using Precinct88.Core;
+using Precinct88.Custody;
 using Precinct88.Response;
 using Precinct88.Streets;
 using Precinct88.UI;
@@ -46,6 +48,8 @@ namespace Precinct88
         private readonly Callout _callout;
         private readonly Violations _violations;
         private readonly TrafficStop _traffic;
+        private readonly Restraint _restraint;
+        private readonly Search _search;
 
         private bool _parked;
         private bool _standDown;
@@ -79,6 +83,8 @@ namespace Precinct88
                 _callout = new Callout(_cfg, _fleet);
                 _violations = new Violations(_cfg);
                 _traffic = new TrafficStop(_cfg, _fleet, _violations);
+                _restraint = new Restraint(_cfg);
+                _search = new Search(_cfg);
 
                 Wire();
 
@@ -92,6 +98,8 @@ namespace Precinct88
                          ", foot " + OnOff(_cfg.FootPatrols) +
                          ", response " + OnOff(_cfg.RespondToCrime) +
                          ", stops " + OnOff(_cfg.ContactEnabled && _cfg.TrafficStops) +
+                         ", stun " + OnOff(_cfg.LethalEscalation) +
+                         ", search " + OnOff(_cfg.CustodyEnabled && _cfg.SearchAtOneStar) +
                          ", blips " + OnOff(_cfg.PoliceBlips) +
                          ", suppression " + OnOff(_cfg.SuppressVanillaPatrols) + ".");
             }
@@ -127,6 +135,39 @@ namespace Precinct88
             // The call talks; it does not draw.
             _callout.Say = Screen.Ticker;
             _traffic.Say = Screen.Ticker;
+            _search.Say = Screen.Ticker;
+
+            // The searches hand off to whatever is on the bridge -- or to nothing, which is
+            // the ordinary case and means guns only.
+            _search.Seize = why => Seize(why);
+
+            // THE BRIDGE, SET LAST, so nothing on the other side can see a half-built mod.
+            // Dispatch.Ready() is false until these lines run.
+            Dispatch.Calls = _callout;
+            Dispatch.Force = _fleet;
+            Dispatch.InCustody = () => _search.Running || _traffic.Running;
+        }
+
+        /// <summary>
+        /// Hands a search to whoever registered on the bridge.
+        ///
+        /// Null is the ordinary case -- Hoodrich is not installed, or is installed and has not
+        /// registered yet. The search still works; it is just weapons.
+        /// </summary>
+        private static string Seize(string why)
+        {
+            var handler = Dispatch.Seizer;
+            if (handler == null) return string.Empty;
+
+            try
+            {
+                return handler(why) ?? string.Empty;
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("The seizure handler threw: " + ex.Message);
+                return string.Empty;
+            }
         }
 
         /// <summary>
@@ -164,40 +205,49 @@ namespace Precinct88
 
             try
             {
-                // 1. WHAT AN OFFICER JUST SAW, before anything acts on it. It reads the
-                //    world and the officers already in it, and changes neither.
+                // 1. WHAT THE POLICE MAY DO TO YOU AT ALL, before anything decides to do
+                //    it. Stun guns below three stars, sidearms at and above.
+                _restraint.Update();
+
+                // 2. ONE STAR IS A SEARCH, NOT A CELL. Early, and it runs EVERY FRAME rather
+                //    than on a gate -- the arrest block inside it is a this-frame flag and the
+                //    frames it misses are the frames the engine uses to bust you.
+                _search.Update();
+
+                // 3. What an officer just saw, before anything acts on it. It reads the world
+                //    and the officers already in it, and changes neither.
                 _notice.Update();
 
-                // 2. And who goes. BEFORE the fleet, because this sets the surge and where a
+                // 4. And who goes. BEFORE the fleet, because this sets the surge and where a
                 //    surged car heads, and Fleet reads both on its own tick -- setting them
                 //    afterwards means every response is one tick stale, which at 750ms is
                 //    survivable and at a bad frame rate is not.
                 _callout.Update();
 
-                // 3. HOW YOU ARE DRIVING, continuously, whether or not anybody is looking.
+                // 5. HOW YOU ARE DRIVING, continuously, whether or not anybody is looking.
                 //    The detector runs on its own so a violation is noticed at the moment it
                 //    happens rather than at the moment an officer thinks to check.
                 _violations.Update();
 
-                // 4. The stop currently running, or whether one starts. BEFORE the fleet,
+                // 6. The stop currently running, or whether one starts. BEFORE the fleet,
                 //    because it borrows a unit out of the pool and Fleet must not re-steer a
                 //    car on the same tick it was handed over.
                 _traffic.Update();
 
-                // 5. THE CARS. Everything else in this build is a consequence of where they
+                // 7. THE CARS. Everything else in this build is a consequence of where they
                 //    are, so they move next and the rest of the tick reads the result.
                 _fleet.Update();
 
-                // 6. Officers who are not in a car. Independent of the fleet -- they are
+                // 8. Officers who are not in a car. Independent of the fleet -- they are
                 //    placed by district, not spawned out of it -- but after it because a
                 //    walker and a car in the same street should be the car's street.
                 _foot.Update();
 
-                // 7. After both, so a unit that has just gone out is marked on the same tick
+                // 9. After both, so a unit that has just gone out is marked on the same tick
                 //    it exists rather than a second later.
                 _markers.Update();
 
-                // 8. The vanilla generator, held off every tick because the game keeps
+                // 10. The vanilla generator, held off every tick because the game keeps
                 //    switching it back on. See AmbientCops -- this is a lapse that looks
                 //    exactly like a mod that never worked.
                 if (_cfg.PatrolEnabled && _cfg.SuppressVanillaPatrols)
@@ -205,7 +255,7 @@ namespace Precinct88
                     AmbientCops.Hold(_cfg.OwnDispatch);
                 }
 
-                // 9. EVERY FRAME, and that is the point of it being here rather than on a
+                // 11. EVERY FRAME, and that is the point of it being here rather than on a
                 //    tick of its own. The fleet ticks at 750ms and a light drawn at that rate
                 //    is a strobe.
                 if (_beam != null) _beam.Draw();
@@ -257,6 +307,13 @@ namespace Precinct88
                 // pool entirely and an officer stood in the road with his events blocked; both
                 // have to be given back before anything else is torn down.
                 if (_traffic != null) _traffic.End("the mod is unloading", false);
+                if (_search != null) _search.Stop("the mod is unloading");
+
+                // AND EVERYBODY ARMED AGAIN. A city of officers who can only taser people, left
+                // behind by a script that is no longer running, is a change to the game with no
+                // findable source -- and unlike most of what this mod does it would last the
+                // whole session.
+                if (_restraint != null) _restraint.Release();
 
                 // Units off the call and back on patrol, so nothing is left driving to
                 // somewhere with its lights on while the rest of this runs.
@@ -276,6 +333,12 @@ namespace Precinct88
                 // police back. Nothing in this build takes a hold yet, which is exactly why it
                 // stays -- the day something does, this is already correct.
                 LawHold.ReleaseAll();
+
+                // The bridge last. Anything still holding a reference gets nulls rather than
+                // a half-torn-down mod, and Ready() goes false the moment these do.
+                Dispatch.Calls = null;
+                Dispatch.Force = null;
+                Dispatch.InCustody = null;
 
                 Log.Info("Unloaded. Everything handed back.");
             }

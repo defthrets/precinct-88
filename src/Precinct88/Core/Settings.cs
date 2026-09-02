@@ -103,6 +103,23 @@ namespace Precinct88.Core
         public float CrimeSceneMinutes = 5f;
 
         /// <summary>
+        /// Whether one and two stars are dealt with without shooting you.
+        ///
+        /// Below three stars every officer near you carries a stun gun and nothing else. At
+        /// three they get their sidearms back. Off, everybody carries what the game gave them,
+        /// which at one star is a pistol.
+        /// </summary>
+        public bool LethalEscalation = true;
+
+        /// <summary>
+        /// Whether one star ends in a search rather than a cell.
+        ///
+        /// An officer takes what you are carrying and tells you to move along. Off, the engine
+        /// busts you at one star exactly as it always did.
+        /// </summary>
+        public bool SearchAtOneStar = true;
+
+        /// <summary>
         /// Whether the police react to what they see you doing.
         ///
         /// Not the wanted system -- this is officers noticing gunfire, a gun in the street, a
@@ -418,6 +435,10 @@ namespace Precinct88.Core
                 s.CrimeSceneMinutes = Clamp(ini.GetFloat("Patrol", "CrimeSceneMinutes",
                                                          s.CrimeSceneMinutes), 0.5f, 30f);
                 s.RespondToCrime = ini.GetBool("Patrol", "RespondToCrime", s.RespondToCrime);
+                s.LethalEscalation = ini.GetBool("Custody", "LethalEscalation",
+                                                 s.LethalEscalation);
+                s.SearchAtOneStar = ini.GetBool("Custody", "SearchAtOneStar",
+                                                s.SearchAtOneStar);
                 s.FootPatrols = ini.GetBool("Patrol", "FootPatrols", s.FootPatrols);
                 s.FootUnits = (int)Clamp(ini.GetInt("Patrol", "FootUnits", s.FootUnits), 0f, 8f);
                 s.AlleyPatrol = Clamp(ini.GetFloat("Patrol", "AlleyPatrol", s.AlleyPatrol), 0f, 2f);
