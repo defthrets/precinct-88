@@ -50,6 +50,7 @@ namespace Precinct88
         private readonly TrafficStop _traffic;
         private readonly Restraint _restraint;
         private readonly Search _search;
+        private readonly Status _status;
 
         private bool _parked;
         private bool _standDown;
@@ -85,6 +86,7 @@ namespace Precinct88
                 _traffic = new TrafficStop(_cfg, _fleet, _violations);
                 _restraint = new Restraint(_cfg);
                 _search = new Search(_cfg);
+                _status = new Status(_cfg, _callout, _traffic, _search, _restraint);
 
                 Wire();
 
@@ -272,9 +274,12 @@ namespace Precinct88
             }
             finally
             {
-                // LAST, AND OUTSIDE THE TRY. Somebody stood in front of you talking should be
-                // on top of everything else, and should still be there on a frame where
-                // something above threw.
+                // BOTH IN THE FINALLY, AND IN THIS ORDER. Several paths above return early, so
+                // anything drawn inside the try flickers off whenever a scene takes a shortcut.
+                // The strip is HUD and goes down first; somebody stood in front of you talking
+                // belongs on top of it, and both should survive a frame where something threw.
+                if (_status != null) _status.Draw();
+
                 Dialogue.Draw();
             }
         }

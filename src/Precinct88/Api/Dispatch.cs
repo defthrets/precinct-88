@@ -113,7 +113,7 @@ namespace Precinct88.Api
 
                 var name = string.IsNullOrEmpty(offence) ? "something reported" : offence;
 
-                Calls.Report(name, new Vector3(x, y, z), Weigh(name));
+                Calls.Report(name, new Vector3(x, y, z), Weigh(name), UI.Icons.For(name));
                 return true;
             }
             catch (Exception ex)
@@ -261,8 +261,9 @@ namespace Precinct88.Api
             {
                 if (Calls == null) return false;
 
-                Calls.Report(string.IsNullOrEmpty(reason) ? "a request for a unit" : reason,
-                             new Vector3(x, y, z), 1);
+                var why = string.IsNullOrEmpty(reason) ? "a request for a unit" : reason;
+
+                Calls.Report(why, new Vector3(x, y, z), 1, UI.Icons.For(why));
 
                 return true;
             }

@@ -3,6 +3,7 @@ using GTA;
 using GTA.Math;
 using Precinct88.Core;
 using Precinct88.Streets;
+using Precinct88.UI;
 
 namespace Precinct88.Response
 {
@@ -48,6 +49,7 @@ namespace Precinct88.Response
         private readonly Fleet _fleet;
 
         private string _what;
+        private string _icon = Icons.Unknown;
         private Vector3 _where;
         private int _weight;
         private int _freshAt;
@@ -69,10 +71,34 @@ namespace Precinct88.Response
         /// <summary>What is being answered, for a status line. Null when nothing is.</summary>
         public string What => _what;
 
+        /// <summary>The picture for it, for the strip under the stars.</summary>
+        public string Icon => _icon;
+
+        /// <summary>When it was last seen, so the strip can show a new call differently.</summary>
+        public int FreshAt => _freshAt;
+
+        /// <summary>How many units are on it this instant.</summary>
+        public int OnIt
+        {
+            get
+            {
+                try { return _fleet == null ? 0 : _fleet.OnCalls(); }
+                catch { return 0; }
+            }
+        }
+
         /// <summary>
         /// Something was seen. Start a call, or feed the one already running.
         /// </summary>
-        public void Report(string what, Vector3 where, int weight)
+        /// <summary>
+        /// Something was seen. Start a call, or feed the one already running.
+        ///
+        /// THE ICON IS PASSED IN RATHER THAN LOOKED UP. Everything this mod reports knows
+        /// exactly which picture it means, and deriving it back out of the sentence afterwards
+        /// would be throwing information away and then guessing at it. Only the bridge has to
+        /// guess, because a mod on the other side reports words in its own vocabulary.
+        /// </summary>
+        public void Report(string what, Vector3 where, int weight, string icon)
         {
             if (!_cfg.RespondToCrime) return;
 
@@ -90,6 +116,7 @@ namespace Precinct88.Response
             {
                 _what = what;
                 _weight = weight;
+                _icon = string.IsNullOrEmpty(icon) ? Icons.For(what) : icon;
 
                 if (Say != null)
                 {
@@ -219,6 +246,7 @@ namespace Precinct88.Response
             if (_what != null) Log.Info("Call over (" + why + "): " + _what + ".");
 
             _what = null;
+            _icon = Icons.Unknown;
             _weight = 0;
             _where = Vector3.Zero;
             _freshAt = 0;

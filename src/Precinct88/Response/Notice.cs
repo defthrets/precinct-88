@@ -65,6 +65,9 @@ namespace Precinct88.Response
         /// <summary>How long before this same thing is worth reporting again.</summary>
         public readonly int CooldownMs;
 
+        /// <summary>The picture for it on the strip. See UI.Icons.</summary>
+        public readonly string Icon;
+
         /// <summary>Whether it is happening right now. Nothing in here may throw.</summary>
         public readonly Func<Ped, bool> Happening;
 
@@ -72,13 +75,14 @@ namespace Precinct88.Response
         public int NextAt;
 
         public Misdeed(string name, int weight, bool loud, int cooldownMs, int chance,
-                       Func<Ped, bool> happening)
+                       string icon, Func<Ped, bool> happening)
         {
             Name = name;
             Weight = weight;
             Loud = loud;
             CooldownMs = cooldownMs;
             Chance = chance;
+            Icon = icon;
             Happening = happening;
         }
     }
@@ -183,12 +187,13 @@ namespace Precinct88.Response
         /// single moment several separate responses over the following half minute.
         /// </summary>
         private string _ringingIn;
+        private string _ringingIcon;
         private Vector3 _ringingWhere;
         private int _ringingWeight;
         private int _ringingAt;
 
         /// <summary>Name, where, weight. Wired to Callout by Main.</summary>
-        public Action<string, Vector3, int> Report;
+        public Action<string, Vector3, int, string> Report;
 
         public Notice(Settings cfg, Fleet fleet, Foot foot)
         {
@@ -223,27 +228,27 @@ namespace Precinct88.Response
             {
                 // Heard, not seen -- see Misdeed.Loud. The only thing here that always gets
                 // reported and the only thing worth more than one car.
-                new Misdeed("shots fired", 2, true, 9000, 100,
+                new Misdeed("shots fired", 2, true, 9000, 100, "shots.png",
                             me => Function.Call<bool>(Hash.IS_PED_SHOOTING, me.Handle)),
 
-                new Misdeed("somebody pointing a gun", 1, false, 11000, 80,
+                new Misdeed("somebody pointing a gun", 1, false, 11000, 80, "aim.png",
                             me => Firearm(me) &&
                                   Function.Call<bool>(Hash.IS_PLAYER_FREE_AIMING,
                                                       Game.Player.Handle)),
 
-                new Misdeed("a car being taken", 1, false, 18000, 75,
+                new Misdeed("a car being taken", 1, false, 18000, 75, "key.png",
                             me => Function.Call<bool>(Hash.IS_PED_JACKING, me.Handle)),
 
-                new Misdeed("a car driven at people", 1, false, 12000, 70,
+                new Misdeed("a car driven at people", 1, false, 12000, 70, "runover.png",
                             me => Driving(me) && Since(Hash.GET_TIME_SINCE_PLAYER_HIT_PED)),
 
-                new Misdeed("a fight in the street", 1, false, 14000, 40,
+                new Misdeed("a fight in the street", 1, false, 14000, 40, "fist.png",
                             me => Function.Call<bool>(Hash.IS_PED_IN_MELEE_COMBAT, me.Handle)),
 
                 // THE RARE ONE. Carrying a gun about is not an event, it is a state, and it is
                 // true for most of the time anybody plays this game -- so it is reported
                 // seldom, and in Davis it is reported almost never.
-                new Misdeed("a gun out in the street", 1, false, 20000, 18,
+                new Misdeed("a gun out in the street", 1, false, 20000, 18, "gun.png",
                             me => Firearm(me) && !me.IsInVehicle()),
             };
         }
@@ -266,7 +271,7 @@ namespace Precinct88.Response
                 if (_ringingIn != null && now >= _ringingAt)
                 {
                     Log.Info("Called in by a passer-by: " + _ringingIn + ".");
-                    Report(_ringingIn, _ringingWhere, _ringingWeight);
+                    Report(_ringingIn, _ringingWhere, _ringingWeight, _ringingIcon);
                     _ringingIn = null;
                 }
 
@@ -322,6 +327,7 @@ namespace Precinct88.Response
                         if (_ringingIn == null)
                         {
                             _ringingIn = what.Name;
+                            _ringingIcon = what.Icon;
                             _ringingWhere = me.Position;
                             _ringingWeight = what.Weight;
                             _ringingAt = now + CallInMinMs +
@@ -334,7 +340,7 @@ namespace Precinct88.Response
                     }
 
                     Log.Info("Noticed by an officer: " + what.Name + ".");
-                    Report(what.Name, me.Position, what.Weight);
+                    Report(what.Name, me.Position, what.Weight, what.Icon);
 
                     // One a tick. Reporting four things at once from one moment produces four
                     // ticker lines and one enormous response to what was really a single event.

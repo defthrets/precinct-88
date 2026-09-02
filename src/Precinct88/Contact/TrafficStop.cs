@@ -138,6 +138,9 @@ namespace Precinct88.Contact
         /// <summary>Whether a stop is running. Fleet and Notice both ask.</summary>
         public bool Running => _at != Pull.None;
 
+        /// <summary>What you were stopped for, for the strip under the stars.</summary>
+        public Violation Why => _why;
+
         // ---- per-tick ----------------------------------------------------------
 
         public void Update()
