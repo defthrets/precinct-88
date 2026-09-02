@@ -437,8 +437,19 @@ namespace Precinct88.Custody
             {
                 Cops.Say(_officer, "ARREST_PLAYER");
 
+                // THE ANCHOR IS THE OFFICER, NOT THE SUSPECT, and getting that the wrong way
+                // round is what put the two of them inside each other.
+                //
+                // Both halves of a paired clip are offsets from one shared anchor, so the
+                // anchor decides who does not move. In this pair the COP's half sits almost
+                // exactly on it -- anchor the scene at the player's feet and the officer is
+                // placed at the player's feet, which is precisely what it looked like.
+                //
+                // Anchored on the officer he stays where he walked to, and the player is drawn
+                // into position in front of him -- which is also the right way round for the
+                // fiction: he is the one taking hold of somebody.
                 _scene = Anim.Pair(_officer, Anim.CopCuffs, me, Anim.CrookCuffed,
-                                   Anim.ArrestDict, me.Position, _officer.Heading);
+                                   Anim.ArrestDict, _officer.Position, _officer.Heading);
 
                 if (_scene < 0)
                 {
@@ -498,6 +509,20 @@ namespace Precinct88.Custody
             _at = Detain.Booking;
 
             Dialogue.Say("Officer", "You are under arrest. Watch your head.", BookingMs);
+
+            // AND HE HAS TO BE ALLOWED TO REACT AGAIN, which is why the bust never came.
+            // BlockPermanentEvents was put on him so nothing could interrupt the walk over and
+            // the cuffs -- and it also stops him doing the one thing left to do. The engine's
+            // arrest is an event like any other; an officer who cannot receive events cannot
+            // start one, so the player knelt in handcuffs until the timeout let him go.
+            try
+            {
+                _officer.BlockPermanentEvents = false;
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Could not hand the officer back: " + ex.Message);
+            }
 
             // AND THE POLICE CAN HAVE HIM BACK. Held off for the walk over and the cuffs so
             // that neither got interrupted; released now, because the arrest is the outcome

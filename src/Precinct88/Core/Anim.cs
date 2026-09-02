@@ -127,11 +127,12 @@ namespace Precinct88.Core
         /// both peds are attached to it -- the game then puts each of them where his half of
         /// the animation says he should be, rather than either of them walking there.
         ///
-        /// WHICH IS WHY THE ORIGIN IS THE SUSPECT AND THE HEADING IS THE OFFICER'S. The pair
-        /// was animated with the officer stood behind the crook, both facing the same way; put
-        /// the origin on the crook and orient it the way the officer is already facing and the
-        /// officer's half brings him in behind exactly where he already is. Origin on the
-        /// officer instead and the whole performance happens a metre and a half through a wall.
+        /// THE ANCHOR DECIDES WHO DOES NOT MOVE, and it belongs on the officer. Both halves
+        /// are offsets from one shared point, and in this pair the cop's half sits almost
+        /// exactly on it -- so anchoring at the suspect places the OFFICER at the suspect's
+        /// feet, and the two of them stand inside one another. Anchored on the officer he stays
+        /// where he walked to and the suspect is drawn into position in front of him, which is
+        /// also the right way round for the fiction: he is the one taking hold of somebody.
         ///
         /// Returns the scene id, or -1 if the dictionary would not load -- in which case the
         /// caller falls back to something simpler rather than nothing happening at all.
