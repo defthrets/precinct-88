@@ -1,0 +1,28 @@
+{
+  "_comment": [
+    "Places a foot patrol goes out of its way to have a look at.",
+    "",
+    "An officer whose round starts near one of these will have it built into his",
+    "circuit as a corner, and when he arrives he stops, looks about, and talks to",
+    "whoever is standing there. Everything after the walk is behaviour the mod",
+    "already had -- Rounds gets his notepad out and Chats finds him somebody to",
+    "speak to. All this file does is say WHERE, which is the one thing no amount",
+    "of code can work out on its own.",
+    "",
+    "Add your own. x, y and z are world coordinates; 'name' only ever appears in",
+    "the log, and 'radius' is how close his round has to start before he bothers.",
+    "Delete the file and foot patrols simply walk ordinary routes."
+  ],
+
+  "corners": [
+    { "name": "Strawberry Ave north",  "x": -119.966, "y": -1470.868, "z": 33.822 },
+    { "name": "Carson and Grove",      "x":  -65.728, "y": -1521.149, "z": 34.245 },
+    { "name": "Grove east end",        "x":  -31.633, "y": -1549.419, "z": 31.401 },
+    { "name": "Covenant lot",          "x":  -83.090, "y": -1612.417, "z": 31.479 },
+    { "name": "Chamberlain south",     "x": -130.826, "y": -1656.190, "z": 33.109 },
+    { "name": "Chamberlain mid",       "x": -136.089, "y": -1593.801, "z": 34.244 },
+    { "name": "Forum Drive",           "x": -187.164, "y": -1554.348, "z": 34.955 },
+    { "name": "Forum and Peaceful",    "x": -215.203, "y": -1587.235, "z": 34.869 },
+    { "name": "Peaceful south",        "x": -218.289, "y": -1653.724, "z": 34.463 }
+  ]
+}

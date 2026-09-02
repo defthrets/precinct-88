@@ -94,6 +94,19 @@ namespace Precinct88.Streets
         /// <summary>How many goes at placing one corner before it is left out.</summary>
         private const int Tries = 5;
 
+        /// <summary>
+        /// How far from his post a watched place has to be to get onto his round.
+        ///
+        /// Wider than the round itself, deliberately. An officer put out three streets from a
+        /// corner somebody cares about should walk over to it -- that IS the round, and
+        /// refusing to leave the circle he was spawned in would make the whole idea depend on
+        /// getting lucky with where he appeared.
+        /// </summary>
+        private const float CornerReach = 190f;
+
+        /// <summary>How many of them one round may include.</summary>
+        private const int MostWatched = 2;
+
         private readonly Random _rng;
 
         /// <summary>Puts a relocated officer back to work. Set by Foot.</summary>
@@ -250,6 +263,16 @@ namespace Precinct88.Streets
                 return false;
             }
 
+            // NOT OFF A WATCHED CORNER. Somebody typed that position in deliberately, and if
+            // it happens to sit on tarmac -- a forecourt, a lot, the mouth of an alley -- then
+            // that is where they want him. Dragging him to the nearest pavement would silently
+            // overrule the file.
+            if (Watched(walker.Who.Position))
+            {
+                walker.OnRoadSince = 0;
+                return false;
+            }
+
             if (walker.OnRoadSince == 0)
             {
                 walker.OnRoadSince = now;
@@ -306,6 +329,25 @@ namespace Precinct88.Streets
             // Not every corner. A man who stops at all four of them is a man doing a routine
             // rather than a job, and the point of the route was to stop looking mechanical.
             if (_rng.Next(100) < 55) walker.NextChoreAt = now;
+
+            // EXCEPT A WATCHED ONE, WHICH HE ALWAYS STOPS AT. That is the entire difference
+            // between a corner somebody wrote down and a corner the mod made up -- he came here
+            // on purpose, so he stops, and he is willing to talk to whoever is standing about.
+            //
+            // Both clocks are simply brought forward rather than anything being started here.
+            // Rounds decides whether he gets his notepad out and Chats decides whether there is
+            // anybody worth speaking to; duplicating either would give the same behaviour two
+            // owners and no single place to change it.
+            if (!Watched(walker.Who.Position)) return;
+
+            walker.NextChoreAt = now;
+            walker.NextChatAt = now;
+        }
+
+        /// <summary>Whether he is stood at one of the places somebody wrote down.</summary>
+        private static bool Watched(Vector3 where)
+        {
+            return Streets.Corners.Near(where, ThereRange * 1.6f, 1).Count > 0;
         }
 
         /// <summary>
@@ -323,6 +365,26 @@ namespace Precinct88.Streets
         {
             var found = new List<Vector3>(Corners);
 
+            // THE WATCHED PLACES GO IN FIRST, and they go in unaltered. Everything else in a
+            // round is a point the mod invented and may move freely if it lands badly; these
+            // are somewhere a person decided was worth looking at, and moving one to a tidier
+            // bit of pavement forty metres away would quietly defeat the purpose of naming it.
+            //
+            // They are not road-checked for the same reason. If somebody has written down a
+            // spot in the middle of a car park, that is where they want him to stand.
+            //
+            // NOT EVERY TIME, and the dice matter. If every officer put out near a watched
+            // place made straight for it, each corner would have a permanent uniform stood on
+            // it -- a guard post rather than a patrol, and a map a player learns in an
+            // afternoon. Seven rounds in ten include them; the rest are ordinary.
+            if (_rng.Next(100) < 70)
+            {
+                foreach (var watched in Streets.Corners.Near(post, CornerReach, MostWatched))
+                {
+                    found.Add(watched.Where);
+                }
+            }
+
             var turn = Math.PI * 2d / Corners;
             var start = _rng.NextDouble() * Math.PI * 2d;
 
@@ -338,6 +400,9 @@ namespace Precinct88.Streets
                 found.Add(safe);
             }
 
+            // A round built ENTIRELY of watched places is still a round -- two of them is a
+            // man walking back and forth between two corners, which is exactly what somebody
+            // asking for this wanted. The invented points only ever fill it out.
             return found.Count < 2 ? null : found;
         }
 
