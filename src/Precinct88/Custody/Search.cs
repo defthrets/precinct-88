@@ -174,10 +174,58 @@ namespace Precinct88.Custody
             if (now - _startedAt < SearchMs)
             {
                 Screen.Help("Stay still.");
+                Pose(me);
                 return;
             }
 
             Done(me);
+        }
+
+        /// <summary>
+        /// Hands up, and an officer going through your pockets.
+        ///
+        /// CALLED EVERY TICK ON PURPOSE, and that is safe rather than sloppy: Anim.Play checks
+        /// whether the clip is already running and returns without re-issuing it. Re-issuing is
+        /// what makes a ped judder on the spot, and holding a pose by asking for it repeatedly
+        /// is exactly what every call site here wants to do.
+        ///
+        /// FLAG 49 ON THE PLAYER, 1 ON THE OFFICER, and the difference is the point. 49 is loop
+        /// plus upper-body plus allow player control -- your arms go up and you can still walk,
+        /// which means walking away remains YOUR decision and ends the search as "he got away"
+        /// rather than being a thing done to you. A full-body lock would be the mod taking the
+        /// controller off somebody for four seconds over a one-star offence.
+        ///
+        /// The officer gets a plain loop because he genuinely is being held in place.
+        /// </summary>
+        private void Pose(Ped me)
+        {
+            Anim.Play(me, Anim.HandsUpDict, Anim.HandsUpClip, 49);
+
+            if (Cops.Alive(_officer))
+            {
+                Anim.Play(_officer, Anim.InspectDict, Anim.InspectClip, 1);
+            }
+        }
+
+        /// <summary>
+        /// Hands down, and the officer stops miming.
+        ///
+        /// STOP_ANIM_TASK rather than clearing tasks, because clearing a PLAYER's tasks is a
+        /// blunt instrument that also cancels whatever they were legitimately doing -- and
+        /// leaving the clip running is worse than either: the pose survives the scene and the
+        /// player walks around with his hands up until something else happens to re-task him.
+        /// </summary>
+        private static void Unpose(Ped me, Ped officer)
+        {
+            if (me != null && me.Exists())
+            {
+                Anim.Stop(me, Anim.HandsUpDict, Anim.HandsUpClip);
+            }
+
+            if (Cops.Alive(officer))
+            {
+                Anim.Stop(officer, Anim.InspectDict, Anim.InspectClip);
+            }
         }
 
         /// <summary>
@@ -289,6 +337,18 @@ namespace Precinct88.Custody
 
             _officer = null;
             _overAt = Game.GameTime + GraceMs;
+
+            // HANDS DOWN BEFORE ANYTHING ELSE, and before the early return below. A scene that
+            // ends with nobody having been found still has a player stood in the street with
+            // his arms in the air, and nothing later would ever put them down.
+            try
+            {
+                Unpose(Game.Player.Character, officer);
+            }
+            catch
+            {
+                // The pose ends on its own when they are next re-tasked.
+            }
 
             if (officer == null) return;
 

@@ -295,6 +295,40 @@ namespace Precinct88
             {
                 // The log already said it loaded. This is a courtesy, not a requirement.
             }
+
+            Preflight();
+        }
+
+        /// <summary>
+        /// Exercises the only strings in this mod the compiler cannot check.
+        ///
+        /// ANIMATION DICTIONARY NAMES ARE GUESSES. They are not listed anywhere official, they
+        /// differ between the two editions in places, and Anim is DESIGNED to fail quietly on a
+        /// wrong one -- which is right at runtime and useless when somebody is trying to find
+        /// out whether a feature works at all. An officer who stands still instead of miming a
+        /// search looks exactly like a search that is not running.
+        ///
+        /// So they are loaded once, here, purely so the log answers the question without
+        /// anybody having to get themselves arrested to find out.
+        ///
+        /// On the first TICK rather than in the constructor: SHVDN builds scripts before the
+        /// game is up, and asking for an animation dictionary then answers no for reasons that
+        /// have nothing to do with the name being wrong.
+        /// </summary>
+        private static void Preflight()
+        {
+            try
+            {
+                var hands = Anim.Ready(Anim.HandsUpDict);
+                var inspect = Anim.Ready(Anim.InspectDict);
+
+                Log.Info("Animations: hands-up " + (hands ? "ok" : "MISSING") +
+                         ", search " + (inspect ? "ok" : "MISSING") + ".");
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Could not check the animations: " + ex.Message);
+            }
         }
 
         // ---- teardown ----------------------------------------------------------
