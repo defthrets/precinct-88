@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using GTA;
 using GTA.Math;
 using GTA.Native;
@@ -39,6 +40,19 @@ namespace Precinct88.Streets
 
         private readonly Settings _cfg;
         private readonly Fleet _fleet;
+
+        /// <summary>
+        /// Where each car's beam is pointing, eased between frames.
+        ///
+        /// MOVED OFF THE UNIT so that a car without one can have a beam too. It is keyed by
+        /// vehicle handle and pruned whenever it gets large -- handles are recycled, so a stale
+        /// entry is at worst one frame of a new car's light starting in the wrong place, which
+        /// is exactly what the easing exists to hide.
+        /// </summary>
+        private readonly Dictionary<int, Vector3> _beams = new Dictionary<int, Vector3>();
+
+        /// <summary>Ours, this frame, so the sweep afterwards does not light them twice.</summary>
+        private readonly HashSet<int> _ours = new HashSet<int>();
         private readonly Random _rng = new Random();
 
         public Spotlight(Settings cfg, Fleet fleet)
@@ -63,6 +77,15 @@ namespace Precinct88.Streets
                 var me = Game.Player.Character;
                 if (me == null || !me.Exists()) return;
 
+                // EVERY POLICE CAR, NOT ONLY OURS. The engine's dispatch runs alongside this
+                // build, so most of the marked cars on a night street were not put there by
+                // this mod -- and a rule where three cars sweep a torch about and the other
+                // eight do not is not a feature, it is a tell.
+                //
+                // Scanned rather than tracked, because there is no list of somebody else's
+                // cars. Ours are still handled through their Unit, which knows what it is
+                // doing and can therefore aim the beam properly; the rest get the same light
+                // aimed the plainest way -- see Aim.
                 foreach (var unit in _fleet.Units)
                 {
                     if (!unit.Alive) continue;
@@ -72,8 +95,23 @@ namespace Precinct88.Streets
                     // wandering off down an alley in the middle of one is two scenes at once.
                     if (unit.Doing == Duty.Contact) continue;
 
-                    Beam(unit, me, night);
+                    _ours.Add(unit.Car.Handle);
+
+                    Beam(unit.Car, unit.Driver, unit.Interest, me, night, Aim(unit, unit.Car, me));
                 }
+
+                foreach (var car in World.GetNearbyVehicles(me, DrawRange))
+                {
+                    if (!Cops.Alive(car)) continue;
+                    if (_ours.Contains(car.Handle)) continue;
+
+                    var driver = car.Driver;
+                    if (!Cops.Alive(driver) || !Cops.IsCop(driver)) continue;
+
+                    Beam(car, driver, Steady(car.Handle), me, night, Plain(car, me));
+                }
+
+                _ours.Clear();
             }
             catch (Exception ex)
             {
@@ -81,17 +119,44 @@ namespace Precinct88.Streets
             }
         }
 
-        private void Beam(Unit unit, Ped me, float night)
+        /// <summary>
+        /// Where a car with no Unit points its light.
+        ///
+        /// THE PLAIN VERSION. Our own cars know whether they are rolling, parked or searching
+        /// and aim accordingly; somebody else's car knows none of that from out here. So it
+        /// sweeps -- which is the safest of the three, reads as a patrol at any speed, and is
+        /// what a light on a moving car looks like anyway.
+        /// </summary>
+        private static Vector3 Plain(Vehicle car, Ped me)
         {
-            var car = unit.Car;
+            var swing = (float)Math.Sin(Game.GameTime * 0.0004d + car.Handle) * 14f;
 
-            var want = Aim(unit, car, me);
+            return car.Position + car.ForwardVector * Ahead + car.RightVector * swing;
+        }
+
+        /// <summary>
+        /// How interested a crew we did not roll for happens to be.
+        ///
+        /// Derived from the handle rather than stored, so it is stable for the life of the car
+        /// without a dictionary that would then need pruning. The same car is the same crew
+        /// every time it is asked, which is all the property was ever for.
+        /// </summary>
+        private static float Steady(int handle)
+        {
+            return ((handle * 2654435761u) % 1000u) / 1000f;
+        }
+
+        private void Beam(Vehicle car, Ped driver, float interest, Ped me, float night,
+                          Vector3 want)
+        {
+            Vector3 was;
+            _beams.TryGetValue(car.Handle, out was);
 
             // Eased toward it. First frame snaps, or the beam starts at the origin of the map
             // and sweeps across Los Santos to get here.
-            unit.Beam = unit.Beam == Vector3.Zero
-                ? want
-                : unit.Beam + (want - unit.Beam) * Ease;
+            var beam = was == Vector3.Zero ? want : was + (want - was) * Ease;
+
+            _beams[car.Handle] = beam;
 
             // Out of the driver's window: forward of the pillar, to the left, at head height.
             // Not the centre of the car, which puts the beam through the bonnet.
@@ -100,7 +165,7 @@ namespace Precinct88.Streets
                        + car.RightVector * -0.9f
                        + new Vector3(0f, 0f, 0.75f);
 
-            var dir = unit.Beam - from;
+            var dir = beam - from;
             if (dir.Length() < 0.5f) return;
 
             dir.Normalize();

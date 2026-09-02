@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using GTA;
+using GTA.Math;
 using GTA.Native;
 using Precinct88.Core;
 
@@ -16,9 +17,17 @@ namespace Precinct88.Streets
     /// nothing since load. The F11 panel answers it with a number; this answers it at a glance,
     /// on the map, including the units you are nowhere near.
     ///
-    /// ONLY OUR OWN. Marking every police vehicle in the world would include whatever another
-    /// script has spawned, which turns a diagnostic into a lie -- the whole question being asked
-    /// is which cars are ours.
+    /// EVERY POLICE UNIT, NOT ONLY OURS, and that is a reversal worth explaining. This began
+    /// as a diagnostic: the question was "is the pool producing cars at all", and marking the
+    /// engine's as well would have answered it with a lie.
+    ///
+    /// It has stopped being a diagnostic. The engine's dispatch runs alongside this build, so
+    /// most of the police a player actually sees are not ours -- and a map that shows three
+    /// cars while eight are on the street is not a truthful map, it is a map of an
+    /// implementation detail. Which mod spawned a police car is the least interesting thing
+    /// about it to everybody except the person who wrote the mod.
+    ///
+    /// The log still answers the original question, and answers it better.
     ///
     /// ONE COLOUR FOR ALL OF THEM, and that was a deliberate walk-back. These were once
     /// tinted per force -- blue city, yellow sheriff, white highway, green ranger -- on the
@@ -127,6 +136,11 @@ namespace Precinct88.Streets
                     }
                 }
 
+                // AND EVERYBODY ELSE'S. Scanned rather than tracked, because we do not own
+                // them and have no list -- so this is the one place in the mod that asks the
+                // world what is out there instead of remembering what it put there.
+                Others(wanted, me, stars);
+
                 // Anything marked that is no longer out. A blip left on a released car follows
                 // whatever the game does with it next, which is how you end up with a police
                 // marker on a taxi.
@@ -136,6 +150,72 @@ namespace Precinct88.Streets
             {
                 Log.Debug("Could not update police markers: " + ex.Message);
             }
+        }
+
+        /// <summary>
+        /// Police this mod did not put on the street.
+        ///
+        /// NO DUTY AND NO ERRAND TO READ, so the mood is inferred from the only two things
+        /// visible from outside: whether you are wanted, and whether he is near enough for that
+        /// to be about him. It is cruder than the state our own units carry and it has to be --
+        /// there is nothing else to go on.
+        ///
+        /// Anything already marked is skipped, which is what the set is for: a borrowed car in
+        /// the middle of a traffic stop is in the pool AND in the world, and marking it twice
+        /// would give it two blips fighting over one vehicle.
+        /// </summary>
+        private void Others(HashSet<int> wanted, Ped me, int stars)
+        {
+            if (me == null || !me.Exists()) return;
+
+            try
+            {
+                foreach (var car in World.GetNearbyVehicles(me, Reach))
+                {
+                    if (!Cops.Alive(car)) continue;
+                    if (wanted.Contains(car.Handle)) continue;
+
+                    var driver = car.Driver;
+                    if (!Cops.Alive(driver) || !Cops.IsCop(driver)) continue;
+
+                    wanted.Add(car.Handle);
+
+                    var mood = Guessed(car.Position, me, stars);
+
+                    Mark(car, Sprite(mood, false), Paint(mood), Called(mood),
+                         Size(mood, 0.6f), mood == Mood.Chasing);
+                }
+
+                foreach (var ped in World.GetNearbyPeds(me, Reach))
+                {
+                    if (!Cops.Alive(ped)) continue;
+                    if (wanted.Contains(ped.Handle)) continue;
+                    if (!Cops.IsCop(ped)) continue;
+
+                    // In a car he is already marked as the car, or he is a passenger and does
+                    // not want a second blip on top of the one his vehicle has.
+                    if (ped.IsInVehicle()) continue;
+
+                    wanted.Add(ped.Handle);
+
+                    var mood = Guessed(ped.Position, me, stars);
+
+                    Mark(ped, Sprite(mood, true), Paint(mood), Called(mood),
+                         Size(mood, 0.45f), mood == Mood.Chasing);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Could not mark the rest of the police: " + ex.Message);
+            }
+        }
+
+        /// <summary>The best that can be said about somebody whose orders we cannot read.</summary>
+        private static Mood Guessed(Vector3 where, Ped me, int stars)
+        {
+            if (stars <= 0) return Mood.Patrol;
+
+            return where.DistanceTo(me.Position) < OnYou ? Mood.Chasing : Mood.Responding;
         }
 
         /// <summary>
@@ -274,6 +354,15 @@ namespace Precinct88.Streets
 
         /// <summary>How far off an officer counts as being on you rather than nearby.</summary>
         private const float OnYou = 55f;
+
+        /// <summary>
+        /// How far out the world is scanned for police we did not put there.
+        ///
+        /// Our own units are tracked and can be marked at any distance; these have to be found,
+        /// and finding them is a sweep of every vehicle and ped around the player. Far enough
+        /// to cover a minimap at its usual zoom and no further.
+        /// </summary>
+        private const float Reach = 200f;
 
         private void Mark(Entity what, BlipSprite sprite, BlipColor colour, string name,
                           float scale, bool flashing)

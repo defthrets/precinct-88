@@ -106,14 +106,6 @@ namespace Precinct88.Streets
         public string CallReason;
 
         /// <summary>
-        /// Where the spotlight is pointing, eased toward where it wants to point.
-        ///
-        /// Lives on the unit rather than in Spotlight because it has to survive between frames
-        /// and belongs to this car -- two units passing each other must not share one beam.
-        /// </summary>
-        public Vector3 Beam;
-
-        /// <summary>
         /// How interested this particular crew is in the man on the pavement, 0 to 1.
         ///
         /// Rolled once when the unit goes out and never changed. It is what stops every car in

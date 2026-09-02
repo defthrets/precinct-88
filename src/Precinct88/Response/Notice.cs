@@ -422,20 +422,51 @@ namespace Precinct88.Response
         /// </summary>
         private Sighted Who(Ped me, bool loud)
         {
-            if (Ours(me, loud)) return Sighted.Officer;
+            if (Ours(me, loud) || Uniform(me, loud)) return Sighted.Officer;
 
             return Public(me, loud) ? Sighted.Public : Sighted.Nobody;
         }
 
         /// <summary>
+        /// Anybody in uniform, whoever put them there.
+        ///
+        /// THE FINITE POOL WAS NEVER THE POINT OF THIS TEST. Requiring a report to come from
+        /// one of our own units made sense when they were the only police in the world, and
+        /// this build runs the engine's dispatch alongside -- so an officer stood ten feet away
+        /// watching you was being filed as a member of the PUBLIC, phoning it in on a delay,
+        /// because a different script had spawned him.
+        ///
+        /// He has a radio. What matters is the uniform, not the author.
+        /// </summary>
+        private static bool Uniform(Ped me, bool loud)
+        {
+            try
+            {
+                foreach (var ped in World.GetNearbyPeds(me, loud ? HeardRange : SeenRange))
+                {
+                    if (!Cops.Alive(ped)) continue;
+                    if (!Cops.IsCop(ped)) continue;
+
+                    if (Noticed(ped, me, loud)) return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Could not look for officers: " + ex.Message);
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// Anybody at all who is not one of our units.
         ///
-        /// VANILLA POLICE ARE NOT EXCLUDED, deliberately. Scenario officers stood outside a
-        /// station are left in the world on purpose (see AmbientCops) and doing something in
-        /// front of one and having nothing whatever happen looks far worse than the small
-        /// inconsistency of a uniformed man phoning it in like anybody else. He is not one of
-        /// the finite pool, so he does not get the pool's immediate radio -- which is the
-        /// honest way to hold both ideas at once.
+        /// UNIFORMS ARE NOT IN HERE ANY MORE. They used to be -- an officer this mod had not
+        /// spawned was treated as a member of the public and phoned it in on a delay, which was
+        /// a compromise between wanting him to react at all and wanting reports to come from
+        /// the finite pool. Uniform now takes them, immediately and by radio, because the thing
+        /// that matters about a police officer is the uniform rather than which script put him
+        /// in it.
         ///
         /// Returns on the FIRST person found rather than counting them. Whether one person or
         /// forty saw it changes nothing here; the district's Attention already carries how much
@@ -452,6 +483,10 @@ namespace Precinct88.Response
                     if (ped == null || !ped.Exists() || ped.IsDead) continue;
                     if (ped.Handle == me.Handle) continue;
                     if (!ped.IsHuman) continue;
+
+                    // Uniforms are asked first and answered better -- see Uniform. Anybody
+                    // still here is genuinely a passer-by.
+                    if (Cops.IsCop(ped)) continue;
 
                     // Nobody in a lift, under the map, or otherwise not really present.
                     if (!ped.IsAlive) continue;
