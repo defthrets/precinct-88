@@ -55,6 +55,30 @@ namespace Precinct88.Response
         /// <summary>How long somebody stays down once stunned. Long enough to be searched.</summary>
         private const int GroundTimeMs = 6500;
 
+        /// <summary>
+        /// How close he has to be before he is given the stun gun at all.
+        ///
+        /// SETTING THE COMBAT RANGE TO "NEAR" WAS NOT ENOUGH, and this is why. Near, to the
+        /// game, is still about twenty metres -- a perfectly sensible distance to settle at
+        /// with a pistol and a useless one with a taser, so officers advanced exactly as far
+        /// as they had been told to and then stood there firing prongs across a car park.
+        ///
+        /// There is no combat attribute for "hold fire until you are close". So he is not
+        /// given the thing he cannot yet use: beyond this he carries nothing, and an officer
+        /// with nothing has one way to make progress, which is to keep walking. The weapon
+        /// appears when it would actually work.
+        /// </summary>
+        private const float TaseRange = 9f;
+
+        /// <summary>
+        /// And how far he has to fall back before it is taken off him again.
+        ///
+        /// The gap between the two is the whole point. One threshold on a man walking towards
+        /// you is a weapon that appears and vanishes several times a second at exactly the
+        /// distance he is standing.
+        /// </summary>
+        private const float PutAway = 13f;
+
         private readonly Settings _cfg;
 
         /// <summary>
@@ -65,6 +89,9 @@ namespace Precinct88.Response
         /// peds is how a script keeps entities alive that the game wants to stream out.
         /// </summary>
         private readonly HashSet<int> _stunned = new HashSet<int>();
+
+        /// <summary>And of everybody currently close enough to be holding one.</summary>
+        private readonly HashSet<int> _drawn = new HashSet<int>();
 
         private int _lastTick;
         private bool _lethalLast;
@@ -122,8 +149,10 @@ namespace Precinct88.Response
                     if (!Cops.Alive(ped)) continue;
                     if (!Cops.IsCop(ped)) continue;
 
-                    if (Lethal) Arm(ped);
-                    else Disarm(ped);
+                    if (Lethal) { Arm(ped); continue; }
+
+                    Disarm(ped);
+                    Reach(ped, ped.Position.DistanceTo(me.Position));
                 }
             }
             catch (Exception ex)
@@ -139,8 +168,9 @@ namespace Precinct88.Response
 
             try
             {
+                // NOTHING AT ALL TO BEGIN WITH. Reach hands him the stun gun once he is close
+                // enough for it to be worth having; until then he is empty-handed on purpose.
                 who.Weapons.RemoveAll();
-                who.Weapons.Give(WeaponHash.StunGun, 200, true, true);
 
                 // NOT DROPPED ON DEATH. Otherwise every low-level encounter becomes a way to
                 // farm stun guns off the pavement, which is a thing this rule accidentally
@@ -161,9 +191,43 @@ namespace Precinct88.Response
             }
         }
 
+        /// <summary>
+        /// The stun gun, but only once he is near enough to use it.
+        ///
+        /// Two sets rather than one because these are two different facts: _stunned is
+        /// everybody the rule applies to, _drawn is who is holding something this second. A
+        /// man can be under the rule and empty-handed for most of a chase.
+        /// </summary>
+        private void Reach(Ped who, float apart)
+        {
+            try
+            {
+                var has = _drawn.Contains(who.Handle);
+
+                if (!has && apart <= TaseRange)
+                {
+                    who.Weapons.Give(WeaponHash.StunGun, 200, true, true);
+                    _drawn.Add(who.Handle);
+                    return;
+                }
+
+                if (has && apart > PutAway)
+                {
+                    who.Weapons.RemoveAll();
+                    _drawn.Remove(who.Handle);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Could not hand out a stun gun: " + ex.Message);
+            }
+        }
+
         /// <summary>His sidearm back, because it has stopped being that kind of evening.</summary>
         private void Arm(Ped who)
         {
+            _drawn.Remove(who.Handle);
+
             if (!_stunned.Remove(who.Handle)) return;
 
             try
@@ -258,6 +322,7 @@ namespace Precinct88.Response
             }
 
             _stunned.Clear();
+            _drawn.Clear();
         }
     }
 }
