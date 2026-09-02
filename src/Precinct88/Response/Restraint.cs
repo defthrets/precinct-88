@@ -56,6 +56,25 @@ namespace Precinct88.Response
         private const int GroundTimeMs = 6500;
 
         /// <summary>
+        /// How long you have to put a gun away once they have seen it.
+        ///
+        /// A GUN GETS A WARNING, NOT AN EXECUTION. Making a drawn weapon lethal instantly was
+        /// right about the principle and wrong about the manners: police shout at an armed man
+        /// well before they shoot one, and a rule with no interval in it gives the player no
+        /// moment in which the correct decision is available to him. Ten seconds is long enough
+        /// to notice, be told, and holster.
+        ///
+        /// It is also the only thing in this mod that will HAND you a star. Everything else
+        /// reacts to stars it did not create -- but standing in front of the police with a
+        /// firearm out for ten seconds after being told is a decision, and the wanted level is
+        /// what a decision costs.
+        /// </summary>
+        private const int GunGraceMs = 10000;
+
+        /// <summary>How far off they can see it. The same distance they will shoot from.</summary>
+        private const float GunSeenRange = 45f;
+
+        /// <summary>
         /// How close he has to be before he is given the stun gun at all.
         ///
         /// SETTING THE COMBAT RANGE TO "NEAR" WAS NOT ENOUGH, and this is why. Near, to the
@@ -96,6 +115,10 @@ namespace Precinct88.Response
         private int _lastTick;
         private bool _lethalLast;
 
+        /// <summary>When somebody first saw the gun, and whether he has been shouted at.</summary>
+        private int _gunSince;
+        private bool _told;
+
         public Restraint(Settings cfg)
         {
             _cfg = cfg;
@@ -119,23 +142,23 @@ namespace Precinct88.Response
 
                 var stars = Game.Player.Wanted.WantedLevel;
 
-                // A DRAWN GUN OUTRANKS THE STAR COUNT, and nothing about that is a special
-                // case -- it is the rule the stars were always a proxy for. The ladder exists
-                // because a man who shoved somebody should not be shot at; it was never an
-                // argument that a man pointing a pistol should be tased. No police force in
-                // the world answers a firearm with a stun gun because the paperwork is light.
+                // A DRAWN GUN OUTRANKS THE STAR COUNT -- it is the rule the stars were
+                // always a proxy for. The ladder exists because a man who shoved somebody
+                // should not be shot at; it was never an argument that a man pointing a pistol
+                // should be tased. It also closes the obvious exploit: at one star, with stun
+                // guns the only thing anybody carries, an armed player was invulnerable.
                 //
-                // It also closes the obvious exploit in the whole idea: at one star, with
-                // stun guns the only thing anybody is carrying, an armed player was
-                // effectively invulnerable to the entire police force.
-                var gun = Cops.HasGun(Game.Player.Character);
+                // BUT IT DOES NOT OUTRANK IT INSTANTLY. See GunGraceMs -- he is shouted at
+                // first, and the ten seconds after that are his to spend.
+                var overdue = Standoff(me, now);
 
-                Lethal = stars >= LethalAt || gun;
+                Lethal = stars >= LethalAt || overdue;
 
                 if (Lethal != _lethalLast)
                 {
                     Log.Info(Lethal
-                        ? "Force: lethal (" + (gun ? "he has a gun out" : stars + " stars") + ")."
+                        ? "Force: lethal (" + (overdue ? "he would not put the gun away"
+                                                       : stars + " stars") + ")."
                         : "Force: stun guns only at " + stars + " stars.");
 
                     _lethalLast = Lethal;
@@ -159,6 +182,93 @@ namespace Precinct88.Response
             {
                 Log.Debug("Could not set what the police are carrying: " + ex.Message);
             }
+        }
+
+        /// <summary>
+        /// The clock on a drawn gun, and whether it has run out.
+        ///
+        /// IT ONLY STARTS WHEN SOMEBODY CAN SEE IT. A gun carried down an empty alley is not a
+        /// standoff, and starting the clock on the weapon alone would mean walking round a
+        /// corner into an officer and being shot for something he has had no chance to react
+        /// to. Which is the same rule Notice uses for everything else: a real person, who could
+        /// really see it.
+        ///
+        /// Holstering stops it dead and resets it. The whole point of an interval is that the
+        /// thing it is asking for is possible.
+        /// </summary>
+        private bool Standoff(Ped me, int now)
+        {
+            if (!Cops.HasGun(me))
+            {
+                if (_gunSince != 0) Log.Info("Gun put away; standing down.");
+
+                _gunSince = 0;
+                _told = false;
+                return false;
+            }
+
+            if (_gunSince == 0)
+            {
+                if (!Watched(me)) return false;
+
+                _gunSince = now;
+                return false;
+            }
+
+            if (now - _gunSince < GunGraceMs)
+            {
+                if (!_told)
+                {
+                    _told = true;
+                    Log.Info("Gun seen; ten seconds to put it away.");
+                }
+
+                return false;
+            }
+
+            // TIME UP, AND THIS IS THE ONE PLACE THE MOD HANDS OUT A STAR. Everything else in
+            // here reacts to a wanted level somebody else created; refusing to put a firearm
+            // away in front of the police, after being told, is a decision, and this is what
+            // the decision costs.
+            try
+            {
+                var wanted = Game.Player.Wanted;
+
+                if (wanted.WantedLevel < 1)
+                {
+                    wanted.SetWantedLevel(1, false);
+                    wanted.ApplyWantedLevelChangeNow(false);
+
+                    Log.Info("Refused to put the gun away; one star.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Could not raise the wanted level: " + ex.Message);
+            }
+
+            return true;
+        }
+
+        /// <summary>Whether any officer can actually see him from here.</summary>
+        private static bool Watched(Ped me)
+        {
+            try
+            {
+                foreach (var ped in World.GetNearbyPeds(me, GunSeenRange))
+                {
+                    if (!Cops.Alive(ped)) continue;
+                    if (!Cops.IsCop(ped)) continue;
+
+                    if (Cops.Sees(ped, me, GunSeenRange)) return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Could not check who can see the gun: " + ex.Message);
+            }
+
+            return false;
         }
 
         /// <summary>Stun gun and nothing else.</summary>
@@ -323,6 +433,9 @@ namespace Precinct88.Response
 
             _stunned.Clear();
             _drawn.Clear();
+
+            _gunSince = 0;
+            _told = false;
         }
     }
 }

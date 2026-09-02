@@ -107,6 +107,16 @@ namespace Precinct88.Streets
                 {
                     if (walker.Doing == Errand.Watching)
                     {
+                        // STILL DOING IT MEANS STILL WATCHING. Without this he looks over for
+                        // eight seconds and then goes back to his round while the man in front
+                        // of him is still holding a rifle -- which reads as an officer losing
+                        // interest, and it is the one thing he would not do.
+                        //
+                        // Only for the alarming ones. Somebody who did a burnout half a minute
+                        // ago is not still doing a burnout, and a look that never ends is its
+                        // own kind of broken.
+                        if (walker.Alarmed && doing >= 2) walker.WatchUntil = now + 4000;
+
                         if (now < walker.WatchUntil) Hold(walker, me);
                         else Done(walker, now);
 

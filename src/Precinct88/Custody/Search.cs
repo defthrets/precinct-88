@@ -1,7 +1,9 @@
 using System;
 using GTA;
+using GTA.Math;
 using GTA.Native;
 using Precinct88.Core;
+using Precinct88.Streets;
 using Precinct88.UI;
 
 namespace Precinct88.Custody
@@ -14,6 +16,9 @@ namespace Precinct88.Custody
 
         /// <summary>You are down or stood still, and he is walking over.</summary>
         Coming,
+
+        /// <summary>Off the carriageway before anything else happens.</summary>
+        Walking,
 
         /// <summary>He has hold of you. Cuffs going on.</summary>
         Cuffing,
@@ -89,6 +94,18 @@ namespace Precinct88.Custody
 
         /// <summary>How long he will spend trying to reach you at all.</summary>
         private const int ComeMs = 15000;
+
+        /// <summary>
+        /// How long he will spend getting you off the road before giving up on it.
+        ///
+        /// Short. This is a courtesy rather than a requirement -- being cuffed on a pavement is
+        /// better than being cuffed in a live lane, and being cuffed in a live lane is better
+        /// than a scene that stalls because the kerb was fifteen metres away through a fence.
+        /// </summary>
+        private const int WalkMs = 11000;
+
+        /// <summary>Close enough to the kerb to call it the kerb.</summary>
+        private const float AtKerb = 2.6f;
 
         /// <summary>
         /// How long the cuffs take to go on when there is no paired clip to play.
@@ -175,6 +192,12 @@ namespace Precinct88.Custody
 
         private Ped _officer;
         private Detain _at = Detain.None;
+
+        /// <summary>Where he is walking you, when there is anywhere better to be.</summary>
+        private Vector3 _kerb;
+        private bool _led;
+
+        private readonly Random _rng = new Random();
 
         /// <summary>
         /// Hands the search to whoever registered on the bridge, and says what was taken.
@@ -364,6 +387,7 @@ namespace Precinct88.Custody
             switch (_at)
             {
                 case Detain.Coming: Coming(me, now, apart); return;
+                case Detain.Walking: Walking(me, now, apart); return;
                 case Detain.Cuffing: Cuffing(me, now, apart); return;
                 case Detain.Turning: Turning(me, now, apart, since); return;
                 case Detain.Booking: Booking(me, now); return;
@@ -381,6 +405,23 @@ namespace Precinct88.Custody
         {
             if (apart <= Reach)
             {
+                // OFF THE ROAD FIRST, IF THERE IS ANYWHERE TO GO. Nobody turns somebody's
+                // pockets out in a live lane, and an arrest happening on a tram line was the
+                // single most conspicuous thing left in this scene.
+                //
+                // It is a courtesy rather than a requirement, so a kerb that cannot be found
+                // simply skips the step. A scene that stalls because the pavement was on the
+                // other side of a fence would be worse than the thing it was avoiding.
+                if (Pave.OnRoad(me.Position) && Pave.Kerb(me.Position, _rng, out _kerb))
+                {
+                    _at = Detain.Walking;
+                    _phaseAt = now;
+                    _led = false;
+
+                    Dialogue.Say("Officer", "Off the road. Over here.", WalkMs);
+                    return;
+                }
+
                 _at = Detain.Cuffing;
                 _phaseAt = now;
 
@@ -410,6 +451,57 @@ namespace Precinct88.Custody
             catch (Exception ex)
             {
                 Log.Debug("Could not send an officer over: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Being walked to the pavement.
+        ///
+        /// TASKED ONCE, NOT HELD. The player's ped is given a walk to the same spot the officer
+        /// is heading for, and player input cancels it the moment they touch anything -- which
+        /// is exactly right and is why it is issued once rather than re-applied every tick.
+        /// Re-applying would be the mod wrestling the controller off somebody for ten seconds
+        /// over a one-star offence, and holding a man still has never been the point here.
+        ///
+        /// So it is a nudge with a deadline. Walk yourself, be walked, or stand there and be
+        /// dealt with where you are -- all three end in the same place, and only the first two
+        /// end on a pavement.
+        /// </summary>
+        private void Walking(Ped me, int now, float apart)
+        {
+            if (apart > Gone) { Stop("he took off"); return; }
+
+            if (!_led)
+            {
+                _led = true;
+
+                try
+                {
+                    _officer.Task.FollowNavMeshTo(_kerb, PedMoveBlendRatio.Walk, WalkMs,
+                                                  1.2f, FollowNavMeshFlags.Default, 0f);
+
+                    me.Task.FollowNavMeshTo(_kerb, PedMoveBlendRatio.Walk, WalkMs,
+                                            AtKerb * 0.7f, FollowNavMeshFlags.Default, 0f);
+                }
+                catch (Exception ex)
+                {
+                    Log.Debug("Could not walk him to the kerb: " + ex.Message);
+                }
+            }
+
+            Screen.Help("Move to the pavement.");
+            Anim.Play(me, Anim.HandsUpDict, Anim.HandsUpClip, 49);
+
+            // There, or near enough, or out of patience. Off the road is the test rather than
+            // the exact spot -- any pavement will do and he was only ever aiming at one.
+            if (me.Position.DistanceTo(_kerb) < AtKerb ||
+                !Pave.OnRoad(me.Position) ||
+                now - _phaseAt > WalkMs)
+            {
+                _at = Detain.Cuffing;
+                _phaseAt = now;
+
+                Dialogue.Say("Officer", "Hands behind your back.", CuffMs + 800);
             }
         }
 
