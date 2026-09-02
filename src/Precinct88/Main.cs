@@ -255,7 +255,13 @@ namespace Precinct88
                     AmbientCops.Hold(_cfg.OwnDispatch);
                 }
 
-                // 11. EVERY FRAME, and that is the point of it being here rather than on a
+                // 11. WHAT IS BEING SAID TO YOU. Every frame, because it reads a key press
+                //     and a gate would eat one. Updated here and DRAWN in the finally below --
+                //     several paths above return early and a line drawn before them is a line
+                //     that flickers off whenever a scene takes a shortcut.
+                Dialogue.Update();
+
+                // 12. EVERY FRAME, and that is the point of it being here rather than on a
                 //    tick of its own. The fleet ticks at 750ms and a light drawn at that rate
                 //    is a strobe.
                 if (_beam != null) _beam.Draw();
@@ -263,6 +269,13 @@ namespace Precinct88
             catch (Exception ex)
             {
                 Log.Error("Tick failed.", ex);
+            }
+            finally
+            {
+                // LAST, AND OUTSIDE THE TRY. Somebody stood in front of you talking should be
+                // on top of everything else, and should still be there on a frame where
+                // something above threw.
+                Dialogue.Draw();
             }
         }
 
@@ -342,6 +355,10 @@ namespace Precinct88
                 // have to be given back before anything else is torn down.
                 if (_traffic != null) _traffic.End("the mod is unloading", false);
                 if (_search != null) _search.Stop("the mod is unloading");
+
+                // Any question still up is ANSWERED rather than dropped -- a scene waiting on a
+                // callback that never arrives is a scene that never ends.
+                Dialogue.Clear();
 
                 // AND EVERYBODY ARMED AGAIN. A city of officers who can only taser people, left
                 // behind by a script that is no longer running, is a change to the game with no

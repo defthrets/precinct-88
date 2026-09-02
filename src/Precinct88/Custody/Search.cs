@@ -152,6 +152,9 @@ namespace Precinct88.Custody
                 // He is stood there either way.
             }
 
+            Dialogue.Say("Officer", "Hands where I can see them. Anything on you I should " +
+                                    "know about?", SearchMs);
+
             Log.Info("Being searched at one star.");
             if (Say != null) Say("Being searched.");
         }
@@ -272,6 +275,10 @@ namespace Precinct88.Custody
             {
                 Log.Debug("Could not let him go: " + ex.Message);
             }
+
+            Dialogue.Say("Officer", string.IsNullOrEmpty(took)
+                ? "You are clean. Go on, move along."
+                : "I am taking " + took + ". Count yourself lucky.");
 
             if (Say != null)
             {

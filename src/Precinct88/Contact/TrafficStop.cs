@@ -115,6 +115,10 @@ namespace Precinct88.Contact
 
         private Pull _at = Pull.None;
 
+        /// <summary>Whether he has asked yet, and what you said. Reset by Go.</summary>
+        private bool _asked;
+        private bool _admitted;
+
         // NO `Occupied` HOOK YET, and its absence is deliberate rather than an oversight.
         // The settings panel is what would set one -- nothing else in this build takes the
         // controls -- and the panel is parked. A public hook nothing can reach is a warning at
@@ -497,7 +501,28 @@ namespace Precinct88.Contact
                 // He is stood there either way.
             }
 
-            if (now - _phaseAt < TalkMs) return;
+            // HE SPEAKS FIRST, AND HE ASKS. The old version stood him at the window for
+            // five seconds and then put the verdict in the corner of the screen, which made
+            // the officer scenery and the notification the mod. The whole reason he walks over
+            // is that this happens between two people.
+            if (!_asked)
+            {
+                if (now - _phaseAt < 900) return;
+
+                _asked = true;
+
+                Cops.Say(_officer, "GENERIC_HI");
+
+                Dialogue.Ask("Officer",
+                             "Do you know why I stopped you? " + Opening() ,
+                             "Admit it", "Deny it",
+                             said => _admitted = said);
+
+                return;
+            }
+
+            // Still waiting on you. The question times itself out, so this cannot hang.
+            if (Dialogue.Waiting) return;
 
             var weight = Violations.Weight(_why);
 
@@ -508,9 +533,15 @@ namespace Precinct88.Contact
             if (_unit.Temper == Temper.Lenient) letOff += 22;
             else if (_unit.Temper == Temper.Strict) letOff -= 18;
 
+            // WHAT YOU SAID COUNTS FOR SOMETHING, AND NOT VERY MUCH. Admitting it helps a
+            // little, because officers would rather not argue; it does not help enough to make
+            // the question a lever you pull for a free pass, which would make asking it
+            // pointless. Saying nothing is read as denying it -- see Dialogue.Ask.
+            letOff += _admitted ? 12 : -6;
+
             if (_rng.Next(100) < letOff)
             {
-                Cops.Say(_officer, "GENERIC_HI");
+                Dialogue.Say("Officer", Warned());
                 if (Say != null) Say("Let off with a warning: " + Violations.Called(_why) + ".");
                 Log.Info("Warning given for " + Violations.Called(_why) + ".");
             }
@@ -520,6 +551,44 @@ namespace Precinct88.Contact
             }
 
             Go(Pull.Leaving, now);
+        }
+
+        /// <summary>
+        /// What he opens with, which is the offence in his own words.
+        ///
+        /// Violations.Called already phrases every offence as something a person would say out
+        /// loud -- "a burnout in a public street" rather than BURNOUT -- which is exactly what
+        /// this needs and the reason it is not re-written here.
+        /// </summary>
+        private string Opening()
+        {
+            switch (_unit.Temper)
+            {
+                case Temper.Strict:
+                    return "That was " + Violations.Called(_why) + ".";
+
+                case Temper.Lenient:
+                    return "Looked a lot like " + Violations.Called(_why) + " to me.";
+
+                default:
+                    return "I clocked " + Violations.Called(_why) + ".";
+            }
+        }
+
+        /// <summary>And what he says when he decides not to bother.</summary>
+        private string Warned()
+        {
+            switch (_unit.Temper)
+            {
+                case Temper.Strict:
+                    return "I am writing nothing this time. Do not give me a reason to.";
+
+                case Temper.Lenient:
+                    return "Go on, get out of here. Slow down.";
+
+                default:
+                    return "Consider this a warning. On your way.";
+            }
         }
 
         /// <summary>
@@ -544,6 +613,9 @@ namespace Precinct88.Contact
             {
                 Log.Debug("Could not take the fine: " + ex.Message);
             }
+
+            Dialogue.Say("Officer", "That is a " + amount + " dollar ticket for " +
+                                    Violations.Called(_why) + ". Sign here.");
 
             if (Say != null)
             {
@@ -650,6 +722,12 @@ namespace Precinct88.Contact
         {
             _at = next;
             _phaseAt = now;
+
+            // Per phase, not per stop. Talking is the only phase that asks anything, and it is
+            // entered exactly once -- but resetting here means a phase that ever gets re-entered
+            // cannot silently skip its question.
+            _asked = false;
+            _admitted = false;
         }
 
         /// <summary>
@@ -675,6 +753,13 @@ namespace Precinct88.Contact
             // A gap before anybody else takes an interest, so being let off is not immediately
             // followed by the next car deciding the same thing about the same driving.
             _overAt = Game.GameTime + (int)(Math.Max(1f, _cfg.StopCooldownSeconds) * 1000f);
+
+            // A QUESTION ONLY, NOT WHATEVER IS ON SCREEN. Driving off mid-sentence leaves a
+            // question box up with a live callback behind it, waiting on somebody who is now
+            // three streets away. But End also runs on the ordinary path, moments after the
+            // verdict was put on screen -- so clearing unconditionally would swallow the one
+            // line the player most needs to read.
+            if (Dialogue.Waiting) Dialogue.Clear();
 
             try
             {
