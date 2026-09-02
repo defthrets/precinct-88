@@ -121,8 +121,18 @@ namespace Precinct88.Streets
                 {
                     if (walker.Doing == Errand.Busy)
                     {
-                        if (now < walker.BusyUntil) Hold(walker);
-                        else Done(walker, now);
+                        // ENDED EARLY IF HE IS IN THE ROAD. Refusing to START one there was
+                        // half the answer: traffic moves, junctions are wide, and a man who was
+                        // on a pavement when he got his clipboard out can be in a live lane
+                        // thirty seconds later without having moved at all.
+                        if (now >= walker.BusyUntil || Pave.OnRoad(walker.Who.Position))
+                        {
+                            Done(walker, now);
+                        }
+                        else
+                        {
+                            Hold(walker);
+                        }
 
                         continue;
                     }
@@ -142,7 +152,7 @@ namespace Precinct88.Streets
                     // lane writing on a clipboard -- which is a far more conspicuous version of
                     // the same fault Route spends its time correcting. Waiting costs nothing:
                     // he is walking somewhere anyway and the corner is a few seconds away.
-                    if (OnRoad(walker.Who.Position)) continue;
+                    if (Pave.OnRoad(walker.Who.Position)) continue;
 
                     Begin(walker, now);
                 }
@@ -154,26 +164,6 @@ namespace Precinct88.Streets
             }
         }
 
-        /// <summary>
-        /// Whether he is stood on a carriageway.
-        ///
-        /// The game's own answer rather than a distance to the nearest road node, because a
-        /// node is the CENTRELINE and says nothing useful about a wide junction or a slip road.
-        /// </summary>
-        private static bool OnRoad(Vector3 where)
-        {
-            try
-            {
-                return Function.Call<bool>(Hash.IS_POINT_ON_ROAD,
-                                           where.X, where.Y, where.Z, 0);
-            }
-            catch
-            {
-                // Cannot tell, so let him get on with it. Refusing every chore on an exception
-                // would quietly remove the whole behaviour.
-                return false;
-            }
-        }
 
         private void Begin(Walker walker, int now)
         {

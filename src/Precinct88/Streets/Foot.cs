@@ -74,6 +74,9 @@ namespace Precinct88.Streets
         public int OnRoadSince;
         public int RoadCheckAt;
 
+        /// <summary>Whether he is on his way off a road to somewhere better.</summary>
+        public bool Relocating;
+
         public bool Alive => Cops.Alive(Who);
 
         /// <summary>
@@ -226,7 +229,7 @@ namespace Precinct88.Streets
             _chats = new Chats(_rng) { Repost = w => Post(w, w.PostedAt) };
             _rounds = new Rounds(_rng) { Repost = w => Post(w, w.PostedAt) };
             _reacts = new Reacts(_rng) { Repost = w => Post(w, w.PostedAt) };
-            _route = new Route(_rng);
+            _route = new Route(_rng) { Repost = w => Post(w, w.PostedAt) };
         }
 
         public int Count => _out.Count;
