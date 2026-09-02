@@ -90,8 +90,20 @@ namespace Precinct88.Custody
         /// <summary>How long he will spend trying to reach you at all.</summary>
         private const int ComeMs = 15000;
 
-        /// <summary>How long the cuffs take to go on.</summary>
+        /// <summary>
+        /// How long the cuffs take to go on when there is no paired clip to play.
+        ///
+        /// The fallback only. With the animation running, the ANIMATION decides how long it
+        /// takes -- a fixed timer next to a clip of a fixed length is two clocks that agree
+        /// until somebody changes one.
+        /// </summary>
         private const int CuffMs = 2600;
+
+        /// <summary>And the longest the paired clip may take before it is written off.</summary>
+        private const int CuffPairMs = 9000;
+
+        /// <summary>How far through the clip the cuffs actually meet his wrists.</summary>
+        private const float CuffsOnAt = 0.62f;
 
         /// <summary>And how long the search itself takes once they are on.</summary>
         private const int SearchMs = 4200;
@@ -108,6 +120,15 @@ namespace Precinct88.Custody
 
         /// <summary>Moving faster than this and you are not waiting, you are going.</summary>
         private const float StillSpeed = 2.2f;
+
+        /// <summary>
+        /// And faster than THIS and he will not even set off after you.
+        ///
+        /// Sprinting is about seven metres a second and a jog is nearer four and a half, so
+        /// this lets an officer start walking over to somebody who is ambling away and not to
+        /// somebody who is legging it. Coming aborts either way if you actually go.
+        /// </summary>
+        private const float RunSpeed = 5.5f;
 
         /// <summary>
         /// How long before anybody bothers you again after a SUCCESSFUL search.
@@ -148,6 +169,9 @@ namespace Precinct88.Custody
         private bool _warned;
 
         private bool _cuffed;
+
+        /// <summary>The paired arrest scene, or -1 when there is not one.</summary>
+        private int _scene = -1;
 
         private Ped _officer;
         private Detain _at = Detain.None;
@@ -240,13 +264,30 @@ namespace Precinct88.Custody
         {
             if (me.IsInVehicle()) return;
 
-            var down = me.IsRagdoll ||
-                       Function.Call<bool>(Hash.IS_PED_BEING_STUNNED, me.Handle, 0);
+            // NOT WHILE HE HAS A GUN OUT. Nobody walks up to an armed man to put cuffs on him
+            // -- and Restraint has already given every officer in sight a sidearm on the same
+            // grounds, so a detention starting here would be a man strolling into a firefight
+            // his own colleagues started.
+            if (Cops.HasGun(me)) return;
 
-            if (!down && me.Velocity.Length() > StillSpeed) return;
+            var down = Down(me);
 
-            var officer = Nearest(me, down ? Spot : Reach);
+            if (!down && me.Velocity.Length() > RunSpeed) return;
+
+            // ALWAYS FROM RANGE, AND THIS WAS THE TASING BUG. It used to reach twenty-six
+            // metres only when it could tell you were down, and arm's length otherwise -- but
+            // a tased ped plays a stun ANIMATION rather than going ragdoll, and
+            // IS_PED_BEING_STUNNED is only true during the shock itself, which a quarter-second
+            // tick misses nearly every time. So "down" was almost always false, the officer had
+            // to already be within three metres, and he had shot you from twenty. Nothing ever
+            // started, so nothing ever ended, so he tased you again.
+            //
+            // Detecting the stun is not worth relying on. He comes over whenever he can see
+            // you and you are not sprinting; Coming decides whether that was a mistake.
+            var officer = Nearest(me, Spot);
             if (officer == null) return;
+
+            if (!Cops.Sees(officer, me, Spot)) return;
 
             _officer = officer;
             _at = Detain.Coming;
@@ -274,6 +315,30 @@ namespace Precinct88.Custody
             if (Say != null) Say("Detained.");
         }
 
+        /// <summary>
+        /// Whether he is on the floor.
+        ///
+        /// ASKED FOUR WAYS BECAUSE NO ONE OF THEM IS RELIABLE. Being tased is an animation
+        /// rather than a ragdoll for most of its length, IS_PED_BEING_STUNNED is true only
+        /// during the shock, and getting up is its own state again. This is now only used to
+        /// choose what the officer SAYS, so a wrong answer costs a line of dialogue rather
+        /// than the whole scene -- which is exactly why it is no longer in the way of it.
+        /// </summary>
+        private static bool Down(Ped me)
+        {
+            try
+            {
+                return me.IsRagdoll ||
+                       Function.Call<bool>(Hash.IS_PED_BEING_STUNNED, me.Handle, 0) ||
+                       Function.Call<bool>(Hash.IS_PED_GETTING_UP, me.Handle) ||
+                       Function.Call<bool>(Hash.IS_PED_FALLING, me.Handle);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         // ---- the scene ---------------------------------------------------------
 
         private void Held(Ped me, int now, int stars)
@@ -283,6 +348,10 @@ namespace Precinct88.Custody
             if (stars < 1 || stars > 2) { Stop("it escalated"); return; }
 
             if (!Cops.Alive(_officer)) { Stop("the officer is gone"); return; }
+
+            // He pulled a gun mid-arrest. Nobody finishes cuffing somebody who has just drawn
+            // on them, and Restraint has already handed everybody their sidearms back.
+            if (Cops.HasGun(me)) { Stop("he drew a gun"); return; }
 
             var since = now - _lastProgressAt;
             _lastProgressAt = now;
@@ -360,7 +429,31 @@ namespace Precinct88.Custody
         {
             if (apart > Gone) { Stop("he took off"); return; }
 
-            if (!_cuffed)
+            // THE ARREST ITSELF, STARTED ONCE. Both halves of a paired clip on one clock --
+            // the officer takes hold of him, turns him round, and puts the cuffs on behind his
+            // back, because that is what the animators drew. Anim.Pair explains why the scene
+            // origin is the suspect and the heading is the officer's.
+            if (_scene < 0 && !_cuffed)
+            {
+                Cops.Say(_officer, "ARREST_PLAYER");
+
+                _scene = Anim.Pair(_officer, Anim.CopCuffs, me, Anim.CrookCuffed,
+                                   Anim.ArrestDict, me.Position, _officer.Heading);
+
+                if (_scene < 0)
+                {
+                    Log.Info("No paired arrest clip; cuffing without one.");
+                }
+            }
+
+            Screen.Help("Cuffed.");
+
+            var through = _scene < 0 ? 1f : Anim.Phase(_scene);
+
+            // ON WHEN THEY MEET HIS WRISTS, not at the start and not at the end. Applied at
+            // the start and the player is held before anybody has touched him; applied at the
+            // end and he can walk out of the animation of being handcuffed.
+            if (!_cuffed && (_scene < 0 ? now - _phaseAt >= CuffMs : through >= CuffsOnAt))
             {
                 _cuffed = true;
 
@@ -372,14 +465,19 @@ namespace Precinct88.Custody
                 {
                     Log.Debug("Could not put the cuffs on: " + ex.Message);
                 }
-
-                Cops.Say(_officer, "ARREST_PLAYER");
             }
 
-            Screen.Help("Cuffed.");
-            Pose(me);
+            // WITHOUT THE PAIRED CLIP, the old pose is still better than nothing: he ends up
+            // cuffed, it just happens rather than being performed.
+            if (_scene < 0) Pose(me);
 
-            if (now - _phaseAt < CuffMs) return;
+            if (!_cuffed) return;
+
+            // The clip is allowed to finish before the fade or the search begins, so the last
+            // thing the player sees is his hands going behind his back rather than a cut.
+            if (_scene >= 0 && through < 0.98f && now - _phaseAt < CuffPairMs) return;
+
+            if (_scene < 0 && now - _phaseAt < CuffMs) return;
 
             _phaseAt = now;
             _lastProgressAt = now;
@@ -685,6 +783,7 @@ namespace Precinct88.Custody
 
             _officer = null;
             _at = Detain.None;
+            _scene = -1;
             _overAt = Game.GameTime + graceMs;
             _driftSince = 0;
             _warned = false;

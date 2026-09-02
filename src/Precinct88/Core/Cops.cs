@@ -140,6 +140,39 @@ namespace Precinct88.Core
         /// armed", says yes to both on some builds. Asked by hash so there is nothing to get
         /// wrong.
         /// </summary>
+        /// <summary>
+        /// A GUN, as opposed to a bat, a phone, a parachute or empty hands.
+        ///
+        /// THE DISTINCTION THE WHOLE FORCE LADDER TURNS ON. Armed() answers "is he holding
+        /// something", which is the right question for whether an officer looks twice and the
+        /// wrong one for whether he draws. A man with a baseball bat gets tased; a man with a
+        /// pistol does not, whatever his star count says.
+        ///
+        /// It lived privately in two files before this and was about to live in a third, which
+        /// is how a rule ends up meaning three slightly different things.
+        /// </summary>
+        public static bool HasGun(Ped who)
+        {
+            try
+            {
+                if (!Armed(who)) return false;
+
+                var group = who.Weapons.Current.Group;
+
+                return group != WeaponGroup.Unarmed &&
+                       group != WeaponGroup.Melee &&
+                       group != WeaponGroup.Parachute &&
+                       group != WeaponGroup.PetrolCan &&
+                       group != WeaponGroup.FireExtinguisher &&
+                       group != WeaponGroup.DigiScanner &&
+                       group != WeaponGroup.NightVision;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         public static bool Armed(Ped who)
         {
             try

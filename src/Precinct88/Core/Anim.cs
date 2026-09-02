@@ -1,5 +1,6 @@
 using System;
 using GTA;
+using GTA.Math;
 using GTA.Native;
 
 namespace Precinct88.Core
@@ -118,6 +119,70 @@ namespace Precinct88.Core
             }
         }
 
+        /// <summary>
+        /// Two peds, one performance.
+        ///
+        /// A SYNCHRONISED SCENE IS AN ORIGIN AND A CLOCK. Both clips are authored relative to
+        /// the same point in space, so the scene is created at that point with a heading and
+        /// both peds are attached to it -- the game then puts each of them where his half of
+        /// the animation says he should be, rather than either of them walking there.
+        ///
+        /// WHICH IS WHY THE ORIGIN IS THE SUSPECT AND THE HEADING IS THE OFFICER'S. The pair
+        /// was animated with the officer stood behind the crook, both facing the same way; put
+        /// the origin on the crook and orient it the way the officer is already facing and the
+        /// officer's half brings him in behind exactly where he already is. Origin on the
+        /// officer instead and the whole performance happens a metre and a half through a wall.
+        ///
+        /// Returns the scene id, or -1 if the dictionary would not load -- in which case the
+        /// caller falls back to something simpler rather than nothing happening at all.
+        /// </summary>
+        public static int Pair(Ped a, string aClip, Ped b, string bClip,
+                               string dict, Vector3 at, float heading)
+        {
+            try
+            {
+                if (!Cops.Alive(a) || !Cops.Alive(b)) return -1;
+                if (!Ready(dict)) return -1;
+
+                var scene = Function.Call<int>(Hash.CREATE_SYNCHRONIZED_SCENE,
+                                               at.X, at.Y, at.Z, 0f, 0f, heading, 2);
+
+                // NOT LOOPED. An arrest that loops is a man being cuffed forever, and the
+                // phase never reaches the end so nothing downstream ever fires.
+                Function.Call(Hash.SET_SYNCHRONIZED_SCENE_LOOPED, scene, false);
+
+                Function.Call(Hash.TASK_SYNCHRONIZED_SCENE, a.Handle, scene, dict, aClip,
+                              8f, -8f, 0, 0, 1000f, 0);
+
+                Function.Call(Hash.TASK_SYNCHRONIZED_SCENE, b.Handle, scene, dict, bClip,
+                              8f, -8f, 0, 0, 1000f, 0);
+
+                return scene;
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Could not run a paired scene: " + ex.Message);
+                return -1;
+            }
+        }
+
+        /// <summary>How far through a paired scene is, 0 to 1. Returns 1 if it is gone.</summary>
+        public static float Phase(int scene)
+        {
+            try
+            {
+                if (scene < 0) return 1f;
+
+                if (!Function.Call<bool>(Hash.IS_SYNCHRONIZED_SCENE_RUNNING, scene)) return 1f;
+
+                return Function.Call<float>(Hash.GET_SYNCHRONIZED_SCENE_PHASE, scene);
+            }
+            catch
+            {
+                return 1f;
+            }
+        }
+
         /// <summary>Stops whatever clip is running, without clearing the rest of their tasks.</summary>
         public static void Stop(Ped who, string dict, string clip)
         {
@@ -146,5 +211,21 @@ namespace Precinct88.Core
         /// <summary>An officer looking at something, for the length of a search.</summary>
         public const string InspectDict = "amb@code_human_police_investigate@idle_a";
         public const string InspectClip = "idle_a";
+
+        /// <summary>
+        /// The arrest itself: an officer cuffing somebody from behind.
+        ///
+        /// A PAIRED CLIP, WHICH IS A DIFFERENT KIND OF THING to everything else in this list.
+        /// The others are one clip on one ped. These two are halves of one performance, authored
+        /// together -- the officer's hands go where the crook's wrists are because both were
+        /// animated in the same space -- and playing them independently gives two people miming
+        /// at each other a foot apart.
+        ///
+        /// So they need a SYNCHRONISED SCENE: one origin, one clock, both peds attached to it.
+        /// See Pair below.
+        /// </summary>
+        public const string ArrestDict = "mp_arrest_paired";
+        public const string CopCuffs = "cop_p2_back_left";
+        public const string CrookCuffed = "crook_p2_back_left";
     }
 }

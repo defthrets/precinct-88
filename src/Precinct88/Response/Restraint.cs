@@ -92,12 +92,23 @@ namespace Precinct88.Response
 
                 var stars = Game.Player.Wanted.WantedLevel;
 
-                Lethal = stars >= LethalAt;
+                // A DRAWN GUN OUTRANKS THE STAR COUNT, and nothing about that is a special
+                // case -- it is the rule the stars were always a proxy for. The ladder exists
+                // because a man who shoved somebody should not be shot at; it was never an
+                // argument that a man pointing a pistol should be tased. No police force in
+                // the world answers a firearm with a stun gun because the paperwork is light.
+                //
+                // It also closes the obvious exploit in the whole idea: at one star, with
+                // stun guns the only thing anybody is carrying, an armed player was
+                // effectively invulnerable to the entire police force.
+                var gun = Cops.HasGun(Game.Player.Character);
+
+                Lethal = stars >= LethalAt || gun;
 
                 if (Lethal != _lethalLast)
                 {
                     Log.Info(Lethal
-                        ? "Force: lethal at " + stars + " stars."
+                        ? "Force: lethal (" + (gun ? "he has a gun out" : stars + " stars") + ")."
                         : "Force: stun guns only at " + stars + " stars.");
 
                     _lethalLast = Lethal;

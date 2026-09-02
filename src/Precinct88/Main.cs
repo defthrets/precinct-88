@@ -341,10 +341,12 @@ namespace Precinct88
                 var inspect = Anim.Ready(Anim.InspectDict);
 
                 var radio = Anim.Ready("random@arrests");
+                var cuffs = Anim.Ready(Anim.ArrestDict);
 
                 Log.Info("Animations: hands-up " + (hands ? "ok" : "MISSING") +
                          ", search " + (inspect ? "ok" : "MISSING") +
-                         ", radio " + (radio ? "ok" : "MISSING") + ".");
+                         ", radio " + (radio ? "ok" : "MISSING") +
+                         ", arrest " + (cuffs ? "ok" : "MISSING") + ".");
             }
             catch (Exception ex)
             {
