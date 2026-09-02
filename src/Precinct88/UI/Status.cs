@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using GTA;
+using GTA.Native;
 using Precinct88.Contact;
 using Precinct88.Core;
 using Precinct88.Response;
@@ -30,8 +31,17 @@ namespace Precinct88.UI
     /// </summary>
     internal sealed class Status
     {
-        /// <summary>Icon height as a fraction of screen height. Matches a wanted star.</summary>
-        private const float IconH = 0.031f;
+        /// <summary>
+        /// Icon height as a fraction of screen height.
+        ///
+        /// A little under a wanted star. They sit beneath the stars and reading as a second
+        /// row of them would be worse than being slightly hard to see -- the stars are the
+        /// game's, this row is the mod's, and they should not be mistaken for each other.
+        /// </summary>
+        private const float IconH = 0.024f;
+
+        /// <summary>How far below the stars the row sits.</summary>
+        private const float BelowStars = 0.043f;
 
         /// <summary>Gap between them, in the same space.</summary>
         private const float Gap = 0.0075f;
@@ -83,19 +93,82 @@ namespace Precinct88.UI
 
                 var step = Screen.Square(IconH) + Gap;
 
+                // ANCHORED TO THE SAFE ZONE, NOT THE SCREEN, and that was the whole bug. The
+                // wanted stars are pinned inside the safe zone like every other piece of the
+                // game's HUD; this row was pinned to a fraction of the raw screen width. On
+                // 16:9 those are near enough the same place, which is why it looked right --
+                // on an ultrawide the safe zone is a long way in from the edge and the icons
+                // sailed off to the right of the stars they were meant to sit under.
+                //
+                // The two settings are NUDGES from that anchor now rather than absolute
+                // positions, so a display that puts them slightly off can still be corrected
+                // without them being wrong everywhere else.
+                var x = Edge() + _cfg.KnownStripX;
+                var y = Top() + BelowStars + _cfg.KnownStripY;
+
                 // RIGHT-ALIGNED, BUILT LEFTWARDS. The last icon always sits at the same place
                 // under the stars, so nothing already on screen moves when something new joins.
-                var x = _cfg.KnownStripX;
-
                 for (var i = _row.Count - 1; i >= 0; i--)
                 {
-                    Art.Icon(_row[i].File, x, _cfg.KnownStripY, IconH, _row[i].Tint);
+                    Art.Icon(_row[i].File, x, y, IconH, _row[i].Tint);
                     x -= step;
                 }
             }
             catch (Exception ex)
             {
                 Log.Debug("Could not draw the status strip: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// The right-hand edge of the safe zone, as a fraction of screen width.
+        ///
+        /// THE ARITHMETIC IS THE GAME'S, NOT MINE. GET_SAFE_ZONE_SIZE returns roughly 0.85 to
+        /// 1.0 and is emphatically NOT a margin -- the conversion below (round to two places,
+        /// scale to a 0-10 range, multiply by a magic 5.4 against the real pixel aspect) is the
+        /// one every HUD library in this game arrived at, because it is what the engine does
+        /// internally. Any tidier-looking version of it is wrong on some resolution.
+        /// </summary>
+        private static float Edge()
+        {
+            try
+            {
+                var safe = Function.Call<float>(Hash.GET_SAFE_ZONE_SIZE);
+
+                var g = Math.Round((double)safe, 2);
+                g = 10d - ((g * 100d) - 90d);
+
+                const float Hmp = 5.4f;
+
+                var ratio = Function.Call<float>(Hash.GET_ASPECT_RATIO, false);
+                if (ratio < 0.1f) ratio = 16f / 9f;
+
+                // In fractions of the screen, which is what everything else here works in.
+                var margin = (float)(g * Hmp * ratio) / (720f * ratio);
+
+                return 1f - margin;
+            }
+            catch
+            {
+                return 0.94f;
+            }
+        }
+
+        /// <summary>The top of the safe zone, in fractions of screen height.</summary>
+        private static float Top()
+        {
+            try
+            {
+                var safe = Function.Call<float>(Hash.GET_SAFE_ZONE_SIZE);
+
+                var g = Math.Round((double)safe, 2);
+                g = 10d - ((g * 100d) - 90d);
+
+                return (float)(g * 5.4d) / 720f;
+            }
+            catch
+            {
+                return 0.02f;
             }
         }
 

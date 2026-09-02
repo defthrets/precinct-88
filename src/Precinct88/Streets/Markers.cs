@@ -33,6 +33,22 @@ namespace Precinct88.Streets
     /// The resolve check did not need the colour anyway -- the log names the agency every unit
     /// goes out under, which answers the same question and answers it properly.
     /// </summary>
+    /// <summary>What a marked unit is doing about you, specifically.</summary>
+    internal enum Mood
+    {
+        /// <summary>Working. Nothing to do with you at all.</summary>
+        Patrol,
+
+        /// <summary>Has clocked you and is watching, or is stood talking to you.</summary>
+        Watching,
+
+        /// <summary>On a call. Somebody reported something and he is going.</summary>
+        Responding,
+
+        /// <summary>After YOU, and knows it.</summary>
+        Chasing,
+    }
+
     internal sealed class Markers
     {
         private readonly Settings _cfg;
@@ -67,27 +83,28 @@ namespace Precinct88.Streets
             {
                 var wanted = new HashSet<int>();
 
+                var me = Game.Player.Character;
+                var stars = 0;
+
+                try { stars = Game.Player.Wanted.WantedLevel; }
+                catch { /* No stars is the safe answer. */ }
+
                 if (_fleet != null)
                 {
                     foreach (var unit in _fleet.Units)
                     {
                         if (!unit.Alive) continue;
 
-                        var onACall = unit.Doing == Duty.Responding ||
-                                      unit.Doing == Duty.Searching;
-
                         wanted.Add(unit.Car.Handle);
 
-                        // RED IS NOT A FORCE, IT IS A STATE, which is why it survives the
-                        // move to one colour. It says this particular car has been given
-                        // something to do -- the one thing about a unit that changes minute
-                        // to minute and the one thing worth being able to see from the map.
-                        // The name still says which agency, because a word in the legend is
-                        // not what made four colours wrong.
-                        Mark(unit.Car, Sprite(unit),
-                             onACall ? BlipColor.Red : Police,
-                             onACall ? "Responding" : "Police",
-                             onACall ? 0.75f : 0.6f);
+                        // COLOUR IS STATE, NOT IDENTITY, and that is why four forces share one
+                        // colour and four moods do not. Which agency he belongs to never
+                        // changes and can wait for the legend; what he is doing about you
+                        // changes minute to minute and is the only reason to look at the map.
+                        var mood = Of(unit, me, stars);
+
+                        Mark(unit.Car, Sprite(unit), Paint(mood), Called(mood),
+                             Size(mood, 0.6f), mood == Mood.Chasing);
                     }
                 }
 
@@ -103,7 +120,10 @@ namespace Precinct88.Streets
                         // different shape -- and the SAME shape on purpose, because splitting
                         // them by sprite puts a second police entry in the pause map legend
                         // for what is the same thing standing up.
-                        Mark(walker.Who, BlipSprite.Standard, Police, "Police", 0.45f);
+                        var mood = Of(walker, me, stars);
+
+                        Mark(walker.Who, BlipSprite.Standard, Paint(mood), Called(mood),
+                             Size(mood, 0.45f), mood == Mood.Chasing);
                     }
                 }
 
@@ -115,6 +135,92 @@ namespace Precinct88.Streets
             catch (Exception ex)
             {
                 Log.Debug("Could not update police markers: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// What this car is doing about you.
+        ///
+        /// CHASING OUTRANKS RESPONDING, and the difference is worth a colour of its own. A car
+        /// on a call is going somewhere; a car on a call WHILE YOU ARE WANTED is very probably
+        /// coming to you, and those two want different reactions from a player glancing at a
+        /// minimap.
+        /// </summary>
+        private static Mood Of(Unit unit, Ped me, int stars)
+        {
+            // A stop, or a scene somebody else is running. He is dealing with you directly and
+            // is not going anywhere else.
+            if (unit.Doing == Duty.Contact) return Mood.Watching;
+
+            var onACall = unit.Doing == Duty.Responding || unit.Doing == Duty.Searching;
+
+            if (!onACall) return Mood.Patrol;
+
+            return stars > 0 ? Mood.Chasing : Mood.Responding;
+        }
+
+        /// <summary>
+        /// And what this officer on foot is doing about you.
+        ///
+        /// He has no Duty, only an Errand, and the interesting one is Watching -- which Reacts
+        /// sets the moment he clocks something you are doing and holds for as long as you keep
+        /// doing it. That is the closest thing in this mod to "he has seen you", and it earns a
+        /// colour because it is the state a player would most like to know about.
+        /// </summary>
+        private static Mood Of(Walker walker, Ped me, int stars)
+        {
+            if (walker.Doing == Errand.Watching)
+            {
+                return stars > 0 ? Mood.Chasing : Mood.Watching;
+            }
+
+            // Wanted, and close enough to be part of it. A man on foot forty streets away is
+            // not chasing you however many stars you have.
+            if (stars > 0 && me != null && me.Exists() &&
+                walker.Who.Position.DistanceTo(me.Position) < OnYou)
+            {
+                return Mood.Chasing;
+            }
+
+            return Mood.Patrol;
+        }
+
+        private static BlipColor Paint(Mood mood)
+        {
+            switch (mood)
+            {
+                case Mood.Watching: return Eyes;
+                case Mood.Responding: return Hot;
+                case Mood.Chasing: return Hot;
+                default: return Police;
+            }
+        }
+
+        private static string Called(Mood mood)
+        {
+            switch (mood)
+            {
+                case Mood.Watching: return "Police - watching";
+                case Mood.Responding: return "Police - responding";
+                case Mood.Chasing: return "Police - after you";
+                default: return "Police";
+            }
+        }
+
+        /// <summary>
+        /// Bigger the more it is about you.
+        ///
+        /// Scaled from the base rather than fixed, so a man on foot stays smaller than a car at
+        /// every state instead of the two converging the moment anything happens.
+        /// </summary>
+        private static float Size(Mood mood, float baseSize)
+        {
+            switch (mood)
+            {
+                case Mood.Watching: return baseSize * 1.15f;
+                case Mood.Responding: return baseSize * 1.25f;
+                case Mood.Chasing: return baseSize * 1.35f;
+                default: return baseSize;
             }
         }
 
@@ -150,8 +256,17 @@ namespace Precinct88.Streets
         /// </summary>
         private const BlipColor Police = BlipColor.Blue;
 
+        /// <summary>Clocked you. Not coming yet, but you are the thing he is looking at.</summary>
+        private const BlipColor Eyes = BlipColor.Yellow;
+
+        /// <summary>On a call, or on you.</summary>
+        private const BlipColor Hot = BlipColor.Red;
+
+        /// <summary>How far off an officer counts as being on you rather than nearby.</summary>
+        private const float OnYou = 55f;
+
         private void Mark(Entity what, BlipSprite sprite, BlipColor colour, string name,
-                          float scale)
+                          float scale, bool flashing)
         {
             try
             {
@@ -164,6 +279,11 @@ namespace Precinct88.Streets
                     // makes the whole map flicker.
                     blip.Color = colour;
                     blip.Scale = scale;
+
+                    // FLASHING IS RESERVED FOR ONE STATE and set every pass because it has to
+                    // be turned back OFF as well. A blip left flashing after a pursuit ends is
+                    // a police car that appears to still be after you forever.
+                    blip.IsFlashing = flashing;
 
                     // THE NAME TOO, EVERY PASS, and that is not belt and braces. It was set
                     // once at creation and the pause map showed the game's default anyway --
@@ -182,6 +302,7 @@ namespace Precinct88.Streets
                 blip.Sprite = sprite;
                 blip.Color = colour;
                 blip.Scale = scale;
+                blip.IsFlashing = flashing;
                 blip.IsShortRange = false;
 
                 // Not grouped with anything, and no distance readout -- these are not

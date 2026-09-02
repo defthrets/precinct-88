@@ -230,9 +230,9 @@ namespace Precinct88.Core
         /// stars sit inside the safe zone, which is a slider in the game's own display options,
         /// so these are settings -- nudge them if your safe zone is not the default.
         /// </summary>
-        public float KnownStripX = 0.9385f;
+        public float KnownStripX = 0f;
 
-        public float KnownStripY = 0.0655f;
+        public float KnownStripY = 0f;
 
         /// <summary>
         /// Cameras as a witness that is not a person.
@@ -455,8 +455,15 @@ namespace Precinct88.Core
                                                        s.LoseThemSeconds), 5f, 300f);
                 s.MaxStars = (int)Clamp(ini.GetInt("Wanted", "MaxStars", s.MaxStars), 1f, 5f);
                 s.ShowKnownStrip = ini.GetBool("Wanted", "ShowKnownStrip", s.ShowKnownStrip);
-                s.KnownStripX = Clamp(ini.GetFloat("Wanted", "KnownStripX", s.KnownStripX), 0f, 1f);
-                s.KnownStripY = Clamp(ini.GetFloat("Wanted", "KnownStripY", s.KnownStripY), 0f, 0.9f);
+                // NUDGES, AND THEY MAY BE NEGATIVE. These used to be absolute positions on
+                // the screen; they are now offsets from the safe-zone corner the stars are
+                // pinned to, so the sensible value is zero and the useful range is small in
+                // both directions. An old ini holding 0.9385 would have pushed the row off the
+                // right of the screen, which is why the clamp is this tight rather than 0 to 1.
+                s.KnownStripX = Clamp(ini.GetFloat("Wanted", "KnownStripX", s.KnownStripX),
+                                      -0.4f, 0.2f);
+                s.KnownStripY = Clamp(ini.GetFloat("Wanted", "KnownStripY", s.KnownStripY),
+                                      -0.2f, 0.4f);
                 s.CamerasWatch = ini.GetBool("Wanted", "CamerasWatch", s.CamerasWatch);
                 s.CriminalProfile = ini.GetBool("Wanted", "CriminalProfile", s.CriminalProfile);
                 s.SceneStaysWarm = ini.GetBool("Wanted", "SceneStaysWarm", s.SceneStaysWarm);
