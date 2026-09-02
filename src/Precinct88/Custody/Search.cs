@@ -37,17 +37,65 @@ namespace Precinct88.Custody
         /// <summary>How long the search takes once he is on you.</summary>
         private const int SearchMs = 4200;
 
+        /// <summary>
+        /// Close enough for it to be going on.
+        ///
+        /// SHUFFLING IS NOT FLEEING, and the first version could not tell the difference. It
+        /// measured the gap once a tick and abandoned the whole thing the moment you crossed a
+        /// line -- so a step to the side, being nudged by a passing pedestrian, or the officer
+        /// himself drifting while he settled was enough to end it. And it ended it into the
+        /// worst possible state: still one star, no longer being dealt with, stood next to an
+        /// officer with a stun gun.
+        /// </summary>
+        private const float Leash = 4.8f;
+
+        /// <summary>Past this you are not drifting, you are leaving, and it ends at once.</summary>
+        private const float Gone = 12f;
+
+        /// <summary>How long you may be out of reach before he gives up on you.</summary>
+        private const int DriftGraceMs = 5000;
+
         /// <summary>Moving faster than this and you are not being searched, you are leaving.</summary>
         private const float StillSpeed = 2.2f;
 
-        /// <summary>How long before anybody bothers you again.</summary>
+        /// <summary>
+        /// How long before anybody bothers you again after a SUCCESSFUL search.
+        ///
+        /// Long, because being turned out twice in twenty seconds by two different officers is
+        /// not policing, it is a bug wearing a uniform.
+        /// </summary>
         private const int GraceMs = 20000;
+
+        /// <summary>
+        /// And after one that did not finish, which is a different thing entirely.
+        ///
+        /// THE LONG GRACE ON AN ABANDONED SEARCH WAS A TRAP. You still have the star, so the
+        /// police still want you -- but no new search could begin for twenty seconds, which
+        /// left exactly one thing that could happen in the meantime: get tased, get up, get
+        /// tased again, with the one outcome that resolves it locked out. Short enough that
+        /// being put down leads straight back into being searched, which is the point.
+        /// </summary>
+        private const int LapsedMs = 3500;
 
         private readonly Settings _cfg;
 
         private int _lastTick;
-        private int _startedAt;
         private int _overAt;
+
+        /// <summary>
+        /// How much of the search has actually happened, in milliseconds.
+        ///
+        /// AN ACCUMULATOR RATHER THAN A START TIME, and the difference is the whole fix. A
+        /// start time counts wall clock, so a search you walked out of and came back to would
+        /// finish itself while you were away. This only advances on ticks where he can reach
+        /// you, so stepping back genuinely pauses it and stepping in resumes it.
+        /// </summary>
+        private int _done;
+        private int _lastProgressAt;
+
+        /// <summary>When you first went out of reach, and whether he has said anything.</summary>
+        private int _driftSince;
+        private bool _warned;
 
         private Ped _officer;
 
@@ -138,7 +186,17 @@ namespace Precinct88.Custody
             if (officer == null) return;
 
             _officer = officer;
-            _startedAt = now;
+
+            _done = 0;
+            _lastProgressAt = now;
+            _driftSince = 0;
+            _warned = false;
+
+            // NOBODY SHOOTS AT SOMEBODY THEY ARE SEARCHING. The engine reads a wanted level as
+            // "attack this man" regardless of what this mod thinks is going on, so without
+            // this the officer turning out your pockets is stood next to two others deciding
+            // whether to tase you. Put back in Stop, on every path.
+            Response.LawHold.Ignore(true);
 
             try
             {
@@ -167,21 +225,78 @@ namespace Precinct88.Custody
 
             if (!Cops.Alive(_officer)) { Stop("the officer is gone"); return; }
 
-            if (me.IsInVehicle() ||
-                _officer.Position.DistanceTo(me.Position) > Reach * 2.4f)
+            var since = now - _lastProgressAt;
+            _lastProgressAt = now;
+
+            // Getting in a car is not drifting. It is the one unambiguous statement available.
+            if (me.IsInVehicle()) { Stop("he got in a car"); return; }
+
+            var apart = _officer.Position.DistanceTo(me.Position);
+
+            if (apart > Gone) { Stop("he walked off"); return; }
+
+            if (apart > Leash)
             {
-                Stop("he got away");
+                Drifting(me, now);
                 return;
             }
 
-            if (now - _startedAt < SearchMs)
+            // Back in reach. Whatever that was, it is over.
+            _driftSince = 0;
+            _warned = false;
+
+            // ONLY COUNTED WHILE HE CAN REACH YOU -- see _done. Capped per tick so a frame
+            // hitch, a loading pause or a menu does not hand you a whole search for free.
+            _done += since > 400 ? 400 : since;
+
+            if (_done < SearchMs)
             {
-                Screen.Help("Stay still.");
+                Screen.Help("Being searched. Stay still.");
                 Pose(me);
                 return;
             }
 
             Done(me);
+        }
+
+        /// <summary>
+        /// You have stepped out of reach, and he would rather you did not.
+        ///
+        /// HE FOLLOWS AND HE ASKS, in that order, and only then does he give up. Ending it the
+        /// instant somebody moved was not strictness, it was the scene being unable to cope
+        /// with a pavement -- people get bumped, officers settle, and neither of those is a
+        /// decision to walk away from a police officer.
+        ///
+        /// The search does not advance while this is happening. Waiting it out at five metres
+        /// is not a way to be searched without being searched.
+        /// </summary>
+        private void Drifting(Ped me, int now)
+        {
+            if (_driftSince == 0) _driftSince = now;
+
+            if (!_warned)
+            {
+                _warned = true;
+
+                Dialogue.Say("Officer", "Stay where you are. I have not finished.", DriftGraceMs);
+                Cops.Say(_officer, "GENERIC_CURSE_MED");
+            }
+
+            Screen.Help("Stay still.");
+
+            try
+            {
+                // Walking pace. An officer who breaks into a run has decided you are running,
+                // and that is the thing this whole method exists to not assume.
+                Function.Call(Hash.TASK_GO_TO_ENTITY, _officer.Handle, me.Handle,
+                              DriftGraceMs, Leash * 0.6f, 1.2f, 1073741824f, 0);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Could not follow a drifting search: " + ex.Message);
+            }
+
+            if (now - _driftSince > DriftGraceMs) Stop("he would not stay put");
         }
 
         /// <summary>
@@ -290,7 +405,7 @@ namespace Precinct88.Custody
             Log.Info("Search done. Took: " +
                      (string.IsNullOrEmpty(took) ? "nothing" : took) + ".");
 
-            Stop("done");
+            Stop("done", GraceMs);
         }
 
         /// <summary>Asks the bridge what else was on him. Nothing thrown may leave it.</summary>
@@ -338,12 +453,19 @@ namespace Precinct88.Custody
         /// BlockPermanentEvents set is a man who will stand in a firefight without reacting to
         /// it, and nothing later will ever clear it for him.
         /// </summary>
-        public void Stop(string why)
+        public void Stop(string why, int graceMs = LapsedMs)
         {
             var officer = _officer;
 
             _officer = null;
-            _overAt = Game.GameTime + GraceMs;
+            _overAt = Game.GameTime + graceMs;
+            _driftSince = 0;
+            _warned = false;
+
+            // THE POLICE CAN SEE YOU AGAIN. Unconditional and before anything that can fail:
+            // a player left permanently ignored by every officer in the game, by a scene that
+            // ended badly, is a far worse bug than the one this was preventing.
+            Response.LawHold.Ignore(false);
 
             // HANDS DOWN BEFORE ANYTHING ELSE, and before the early return below. A scene that
             // ends with nobody having been found still has a player stood in the street with
