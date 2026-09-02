@@ -509,8 +509,23 @@ namespace Precinct88.Streets
                 who.IsPersistent = true;
                 who.BlockPermanentEvents = false;
 
+                // NO STUN GUN AT SPAWN, AND THAT IS A FIX RATHER THAN A TRIM.
+                //
+                // They used to be issued one here as set dressing. Restraint hands out the
+                // stun guns now, and crucially it also sets SET_PED_DROPS_WEAPONS_WHEN_DEAD
+                // to false when it does -- so a taser it issued cannot end up on the pavement.
+                // One issued HERE could, because nothing turned that flag off for an officer
+                // Restraint had never processed.
+                //
+                // Which mattered far more than it sounds, because the search now takes the
+                // player's weapons: get searched, walk over a dead officer, and the game
+                // auto-equips the stun gun it finds because your hands are empty. Everything
+                // you killed after that died of electrocution.
+                //
+                // The pistol still drops, as it always has. Only the taser was ever the
+                // problem, and the flag is per-ped rather than per-weapon, so the fix is to
+                // not put one there.
                 who.Weapons.Give(WeaponHash.Pistol, 60, false, true);
-                who.Weapons.Give(WeaponHash.StunGun, 1, false, false);
 
                 who.Armor = 40;
 
