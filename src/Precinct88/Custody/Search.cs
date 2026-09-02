@@ -6,46 +6,75 @@ using Precinct88.UI;
 
 namespace Precinct88.Custody
 {
+    /// <summary>Where a one-star detention has got to.</summary>
+    internal enum Detain
+    {
+        /// <summary>Nothing running.</summary>
+        None,
+
+        /// <summary>You are down or stood still, and he is walking over.</summary>
+        Coming,
+
+        /// <summary>He has hold of you. Cuffs going on.</summary>
+        Cuffing,
+
+        /// <summary>Turning out your pockets.</summary>
+        Turning,
+    }
+
     /// <summary>
-    /// One star: turned out, relieved of what you were carrying, and let go.
+    /// One star: put down, cuffed, turned out, and let go.
     ///
     /// THE MISSING RUNG. In vanilla there is one outcome to being caught, at every level, and
     /// it is BUSTED: a fade to black, a fee, and a respawn -- the same thing that happens when
     /// you die, so the game's police have exactly one ending wearing two costumes. Getting
     /// stopped for a shove and getting taken down after a bank job resolve identically.
     ///
-    /// So one star ends differently now. An officer takes what you are carrying off you and
-    /// tells you to move along. You lose the guns and whatever else you had on you, which is a
-    /// real cost, and you lose no time at all, which is the point -- it is a bad afternoon
+    /// So one star ends differently. An officer walks over, cuffs you, takes what you are
+    /// carrying, and tells you to move along. A real cost and no lost time -- a bad afternoon
     /// rather than the end of the session. Two stars is where the cell starts.
     ///
-    /// THE ENGINE HAS TO BE HELD OFF FOR THIS TO EXIST AT ALL. Vanilla will arrest you at one
-    /// star given the chance, and it does not ask. PREVENT_ARREST_STATE_THIS_FRAME is what
-    /// stops it, and it has to be called EVERY FRAME while the level is one -- it is a
-    /// this-frame flag, so a tick gate of any size lets the bust through in the gaps.
+    /// WHY THIS STARTS FROM TWENTY-SIX METRES AND NOT FROM ARM'S LENGTH, which is the whole of
+    /// the tasing problem. The first version began only once an officer was already within
+    /// reach -- but nothing anywhere made him walk over. So the sequence was: tased, down, up
+    /// again, tased, and round forever, because the one thing that resolves it could not begin
+    /// until somebody closed a gap that nobody had been told to close.
     ///
-    /// It deliberately does not put your hands up, cuff you, or take the camera. Those belong
-    /// to Booking, which is parked, and half of an arrest is worse than none.
+    /// Being put down is now the START of the scene rather than a precondition for it. The
+    /// moment you go down the police are told to hold off and the nearest officer is sent to
+    /// you. He tases you once, because that is how he stops you. He does not tase you twice,
+    /// because after the first one he has somewhere to be.
+    ///
+    /// THE ENGINE HAS TO BE HELD OFF TWICE OVER. It will arrest you at one star given the
+    /// chance and it does not ask -- PREVENT_ARREST_STATE_THIS_FRAME stops that, and has to be
+    /// called EVERY FRAME because it is a this-frame flag. And it reads a wanted level as
+    /// "attack this man" whatever this file believes, so LawHold.Ignore is what stops the two
+    /// officers behind him deciding to have another go while he is working.
     /// </summary>
     internal sealed class Search
     {
         private const int TickMs = 250;
 
-        /// <summary>Close enough to be turning out your pockets.</summary>
-        private const float Reach = 3.6f;
+        /// <summary>
+        /// How far off an officer will come over when you are down.
+        ///
+        /// A stun gun reaches a great deal further than a conversation does, so this has to
+        /// cover the range he shot you from. Anything shorter and the scene cannot start from
+        /// the thing that most often causes it.
+        /// </summary>
+        private const float Spot = 26f;
 
-        /// <summary>How long the search takes once he is on you.</summary>
-        private const int SearchMs = 4200;
+        /// <summary>Close enough to put hands on you.</summary>
+        private const float Reach = 3.6f;
 
         /// <summary>
         /// Close enough for it to be going on.
         ///
         /// SHUFFLING IS NOT FLEEING, and the first version could not tell the difference. It
-        /// measured the gap once a tick and abandoned the whole thing the moment you crossed a
-        /// line -- so a step to the side, being nudged by a passing pedestrian, or the officer
-        /// himself drifting while he settled was enough to end it. And it ended it into the
-        /// worst possible state: still one star, no longer being dealt with, stood next to an
-        /// officer with a stun gun.
+        /// measured the gap once a tick and abandoned everything the moment you crossed a line
+        /// -- so a step to the side, a passing pedestrian, or the officer himself settling was
+        /// enough to end it, into the worst state available: still one star, no longer being
+        /// dealt with, stood next to somebody with a stun gun.
         /// </summary>
         private const float Leash = 4.8f;
 
@@ -55,7 +84,16 @@ namespace Precinct88.Custody
         /// <summary>How long you may be out of reach before he gives up on you.</summary>
         private const int DriftGraceMs = 5000;
 
-        /// <summary>Moving faster than this and you are not being searched, you are leaving.</summary>
+        /// <summary>How long he will spend trying to reach you at all.</summary>
+        private const int ComeMs = 15000;
+
+        /// <summary>How long the cuffs take to go on.</summary>
+        private const int CuffMs = 2600;
+
+        /// <summary>And how long the search itself takes once they are on.</summary>
+        private const int SearchMs = 4200;
+
+        /// <summary>Moving faster than this and you are not waiting, you are going.</summary>
         private const float StillSpeed = 2.2f;
 
         /// <summary>
@@ -70,10 +108,9 @@ namespace Precinct88.Custody
         /// And after one that did not finish, which is a different thing entirely.
         ///
         /// THE LONG GRACE ON AN ABANDONED SEARCH WAS A TRAP. You still have the star, so the
-        /// police still want you -- but no new search could begin for twenty seconds, which
-        /// left exactly one thing that could happen in the meantime: get tased, get up, get
-        /// tased again, with the one outcome that resolves it locked out. Short enough that
-        /// being put down leads straight back into being searched, which is the point.
+        /// police still want you, but no new search could begin for twenty seconds -- leaving
+        /// exactly one thing able to happen in the meantime: get tased, get up, get tased
+        /// again, with the one outcome that resolves it locked out.
         /// </summary>
         private const int LapsedMs = 3500;
 
@@ -81,14 +118,14 @@ namespace Precinct88.Custody
 
         private int _lastTick;
         private int _overAt;
+        private int _phaseAt;
 
         /// <summary>
         /// How much of the search has actually happened, in milliseconds.
         ///
-        /// AN ACCUMULATOR RATHER THAN A START TIME, and the difference is the whole fix. A
-        /// start time counts wall clock, so a search you walked out of and came back to would
-        /// finish itself while you were away. This only advances on ticks where he can reach
-        /// you, so stepping back genuinely pauses it and stepping in resumes it.
+        /// AN ACCUMULATOR RATHER THAN A START TIME. A start time counts wall clock, so a search
+        /// you stepped out of would finish itself while you were away. This only advances on
+        /// ticks where he can reach you: stepping back pauses it, stepping in resumes it.
         /// </summary>
         private int _done;
         private int _lastProgressAt;
@@ -97,7 +134,10 @@ namespace Precinct88.Custody
         private int _driftSince;
         private bool _warned;
 
+        private bool _cuffed;
+
         private Ped _officer;
+        private Detain _at = Detain.None;
 
         /// <summary>
         /// Hands the search to whoever registered on the bridge, and says what was taken.
@@ -116,8 +156,8 @@ namespace Precinct88.Custody
             _cfg = cfg;
         }
 
-        /// <summary>Whether somebody is being turned out right now.</summary>
-        public bool Running => _officer != null;
+        /// <summary>Whether somebody is being dealt with right now.</summary>
+        public bool Running => _at != Detain.None;
 
         /// <summary>
         /// Called EVERY FRAME by Main, and the frame part is load-bearing.
@@ -151,7 +191,7 @@ namespace Precinct88.Custody
                     return;
                 }
 
-                if (Running) { Running_(me, now, stars); return; }
+                if (Running) { Held(me, now, stars); return; }
 
                 if (stars != 1) return;
                 if (now < _overAt) return;
@@ -165,61 +205,59 @@ namespace Precinct88.Custody
             }
         }
 
+        // ---- starting ----------------------------------------------------------
+
         /// <summary>
-        /// Whether an officer has actually got hold of you.
+        /// Whether somebody has stopped you, one way or the other.
         ///
-        /// NOT A TRIGGER RADIUS. He has to be within arm's length AND you have to have stopped
-        /// -- or been put down by a stun gun, which is the ordinary way this happens and the
-        /// reason Restraint sets the ground time as long as it does. Sprinting past an officer
-        /// at one star is not being searched, it is getting away, and it should stay that way.
+        /// TWO WAYS IN, AND THE TASER IS THE COMMON ONE. Either you are stood still with an
+        /// officer right there, which is compliance, or you are on the floor, which is not.
+        /// Both end in the same place; only the dignity differs. Being down reaches much
+        /// further, because being down is not something you can walk out of.
         /// </summary>
         private void Consider(Ped me, int now)
         {
             if (me.IsInVehicle()) return;
 
-            var caught = me.IsRagdoll || Function.Call<bool>(Hash.IS_PED_BEING_STUNNED, me.Handle, 0)
-                         || me.Velocity.Length() < StillSpeed;
+            var down = me.IsRagdoll ||
+                       Function.Call<bool>(Hash.IS_PED_BEING_STUNNED, me.Handle, 0);
 
-            if (!caught) return;
+            if (!down && me.Velocity.Length() > StillSpeed) return;
 
-            var officer = Nearest(me);
+            var officer = Nearest(me, down ? Spot : Reach);
             if (officer == null) return;
 
             _officer = officer;
+            _at = Detain.Coming;
+            _phaseAt = now;
 
             _done = 0;
             _lastProgressAt = now;
             _driftSince = 0;
             _warned = false;
+            _cuffed = false;
 
-            // NOBODY SHOOTS AT SOMEBODY THEY ARE SEARCHING. The engine reads a wanted level as
-            // "attack this man" regardless of what this mod thinks is going on, so without
-            // this the officer turning out your pockets is stood next to two others deciding
-            // whether to tase you. Put back in Stop, on every path.
+            // NOBODY GETS A SECOND GO WHILE HE IS WALKING OVER. This is the line that ends the
+            // tase-get-up-tase loop: the engine reads a wanted level as "attack this man"
+            // regardless of what this file is doing, so until the police are told otherwise
+            // every officer in sight is still solving the same problem the same way.
             Response.LawHold.Ignore(true);
 
-            try
-            {
-                officer.BlockPermanentEvents = true;
+            Safe(officer);
 
-                Function.Call(Hash.TASK_TURN_PED_TO_FACE_ENTITY, officer.Handle, me.Handle, 1200);
-                Function.Call(Hash.TASK_LOOK_AT_ENTITY, officer.Handle, me.Handle, SearchMs, 0, 2);
-            }
-            catch
-            {
-                // He is stood there either way.
-            }
+            Dialogue.Say("Officer", down
+                ? "Stay down. Do not make this worse."
+                : "Hands where I can see them. Stay right there.", ComeMs);
 
-            Dialogue.Say("Officer", "Hands where I can see them. Anything on you I should " +
-                                    "know about?", SearchMs);
-
-            Log.Info("Being searched at one star.");
-            if (Say != null) Say("Being searched.");
+            Log.Info("Detained at one star (" + (down ? "put down" : "stopped") + ").");
+            if (Say != null) Say("Detained.");
         }
 
-        private void Running_(Ped me, int now, int stars)
+        // ---- the scene ---------------------------------------------------------
+
+        private void Held(Ped me, int now, int stars)
         {
-            // It stopped being a search the moment it stopped being one star. Whatever you just
+            // It stopped being this the moment it stopped being one star. Whatever you just
             // did, the officer has bigger problems.
             if (stars != 1) { Stop("it escalated"); return; }
 
@@ -233,13 +271,107 @@ namespace Precinct88.Custody
 
             var apart = _officer.Position.DistanceTo(me.Position);
 
-            if (apart > Gone) { Stop("he walked off"); return; }
-
-            if (apart > Leash)
+            switch (_at)
             {
-                Drifting(me, now);
+                case Detain.Coming: Coming(me, now, apart); return;
+                case Detain.Cuffing: Cuffing(me, now, apart); return;
+                case Detain.Turning: Turning(me, now, apart, since); return;
+            }
+        }
+
+        /// <summary>
+        /// Walking over to you.
+        ///
+        /// HE WALKS. A run would say he thinks you are going somewhere, and the whole point of
+        /// this phase is that nobody has decided that yet -- you are down, or you are stood
+        /// still, and either way there is nothing to chase.
+        /// </summary>
+        private void Coming(Ped me, int now, float apart)
+        {
+            if (apart <= Reach)
+            {
+                _at = Detain.Cuffing;
+                _phaseAt = now;
+
+                Dialogue.Say("Officer", "Hands behind your back.", CuffMs + 800);
                 return;
             }
+
+            // Up and away. Being on the floor does not count as leaving.
+            var bolting = !me.IsRagdoll && me.Velocity.Length() > StillSpeed * 1.6f;
+
+            if (apart > Gone || (bolting && apart > Leash))
+            {
+                Stop("he took off");
+                return;
+            }
+
+            if (now - _phaseAt > ComeMs) { Stop("he could not get to you"); return; }
+
+            Screen.Help("Stay where you are.");
+            Anim.Play(me, Anim.HandsUpDict, Anim.HandsUpClip, 49);
+
+            try
+            {
+                Function.Call(Hash.TASK_GO_TO_ENTITY, _officer.Handle, me.Handle,
+                              ComeMs, Reach * 0.7f, 1.25f, 1073741824f, 0);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Could not send an officer over: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// The cuffs going on.
+        ///
+        /// BOTH THE HOLD AND THE LOOK, because neither is reliable on its own.
+        /// SET_ENABLE_HANDCUFFS is what actually restrains somebody -- it is the mechanical
+        /// part, and without it "cuffed" is a pose you can walk out of. The clip is what makes
+        /// it visible, because the native's own presentation depends on what the ped happened
+        /// to be doing when it was applied and cannot be counted on to read.
+        ///
+        /// EVERY EXIT PATH UNCUFFS. A player left permanently in handcuffs by a script that is
+        /// no longer running has no way to work out why and no way to undo it.
+        /// </summary>
+        private void Cuffing(Ped me, int now, float apart)
+        {
+            if (apart > Gone) { Stop("he took off"); return; }
+
+            if (!_cuffed)
+            {
+                _cuffed = true;
+
+                try
+                {
+                    Function.Call(Hash.SET_ENABLE_HANDCUFFS, me.Handle, true);
+                }
+                catch (Exception ex)
+                {
+                    Log.Debug("Could not put the cuffs on: " + ex.Message);
+                }
+
+                Cops.Say(_officer, "ARREST_PLAYER");
+            }
+
+            Screen.Help("Cuffed.");
+            Pose(me);
+
+            if (now - _phaseAt < CuffMs) return;
+
+            _at = Detain.Turning;
+            _phaseAt = now;
+            _lastProgressAt = now;
+
+            Dialogue.Say("Officer", "Anything on you I should know about?", SearchMs);
+        }
+
+        /// <summary>Going through your pockets.</summary>
+        private void Turning(Ped me, int now, float apart, int since)
+        {
+            if (apart > Gone) { Stop("he walked off"); return; }
+
+            if (apart > Leash) { Drifting(me, now); return; }
 
             // Back in reach. Whatever that was, it is over.
             _driftSince = 0;
@@ -251,7 +383,7 @@ namespace Precinct88.Custody
 
             if (_done < SearchMs)
             {
-                Screen.Help("Being searched. Stay still.");
+                Screen.Help("Being searched.");
                 Pose(me);
                 return;
             }
@@ -260,15 +392,12 @@ namespace Precinct88.Custody
         }
 
         /// <summary>
-        /// You have stepped out of reach, and he would rather you did not.
+        /// You have got out of reach, and he would rather you had not.
         ///
         /// HE FOLLOWS AND HE ASKS, in that order, and only then does he give up. Ending it the
         /// instant somebody moved was not strictness, it was the scene being unable to cope
         /// with a pavement -- people get bumped, officers settle, and neither of those is a
         /// decision to walk away from a police officer.
-        ///
-        /// The search does not advance while this is happening. Waiting it out at five metres
-        /// is not a way to be searched without being searched.
         /// </summary>
         private void Drifting(Ped me, int now)
         {
@@ -283,11 +412,10 @@ namespace Precinct88.Custody
             }
 
             Screen.Help("Stay still.");
+            Pose(me);
 
             try
             {
-                // Walking pace. An officer who breaks into a run has decided you are running,
-                // and that is the thing this whole method exists to not assume.
                 Function.Call(Hash.TASK_GO_TO_ENTITY, _officer.Handle, me.Handle,
                               DriftGraceMs, Leash * 0.6f, 1.2f, 1073741824f, 0);
             }
@@ -299,25 +427,23 @@ namespace Precinct88.Custody
             if (now - _driftSince > DriftGraceMs) Stop("he would not stay put");
         }
 
+        // ---- poses -------------------------------------------------------------
+
         /// <summary>
-        /// Hands up, and an officer going through your pockets.
+        /// Cuffed, and an officer going through your pockets.
         ///
         /// CALLED EVERY TICK ON PURPOSE, and that is safe rather than sloppy: Anim.Play checks
         /// whether the clip is already running and returns without re-issuing it. Re-issuing is
         /// what makes a ped judder on the spot, and holding a pose by asking for it repeatedly
         /// is exactly what every call site here wants to do.
         ///
-        /// FLAG 49 ON THE PLAYER, 1 ON THE OFFICER, and the difference is the point. 49 is loop
-        /// plus upper-body plus allow player control -- your arms go up and you can still walk,
-        /// which means walking away remains YOUR decision and ends the search as "he got away"
-        /// rather than being a thing done to you. A full-body lock would be the mod taking the
-        /// controller off somebody for four seconds over a one-star offence.
-        ///
-        /// The officer gets a plain loop because he genuinely is being held in place.
+        /// FLAG 49 THROUGHOUT: loop, upper body, and allow player control. The cuffs already
+        /// hold you mechanically, so the clip does not also need to -- and a full-body lock on
+        /// top of them is two systems fighting over one ped, which reads as a stutter.
         /// </summary>
         private void Pose(Ped me)
         {
-            Anim.Play(me, Anim.HandsUpDict, Anim.HandsUpClip, 49);
+            Anim.Play(me, Anim.CuffedDict, Anim.CuffedClip, 49);
 
             if (Cops.Alive(_officer))
             {
@@ -326,18 +452,19 @@ namespace Precinct88.Custody
         }
 
         /// <summary>
-        /// Hands down, and the officer stops miming.
+        /// Everything off, on every exit.
         ///
         /// STOP_ANIM_TASK rather than clearing tasks, because clearing a PLAYER's tasks is a
         /// blunt instrument that also cancels whatever they were legitimately doing -- and
-        /// leaving the clip running is worse than either: the pose survives the scene and the
-        /// player walks around with his hands up until something else happens to re-task him.
+        /// leaving a clip running is worse than either: the pose survives the scene and the
+        /// player walks around with his hands behind his back until something re-tasks him.
         /// </summary>
         private static void Unpose(Ped me, Ped officer)
         {
             if (me != null && me.Exists())
             {
                 Anim.Stop(me, Anim.HandsUpDict, Anim.HandsUpClip);
+                Anim.Stop(me, Anim.CuffedDict, Anim.CuffedClip);
             }
 
             if (Cops.Alive(officer))
@@ -346,12 +473,14 @@ namespace Precinct88.Custody
             }
         }
 
+        // ---- the end -----------------------------------------------------------
+
         /// <summary>
         /// What it costs, and then you are free to go.
         ///
         /// THE WANTED LEVEL GOES LAST. Clearing it first would end the one-star state, which is
-        /// what the arrest block above is keyed on, and the engine would have a frame in which
-        /// to do something else with you before this finished.
+        /// what the arrest block is keyed on, and the engine would have a frame in which to do
+        /// something else with you before this finished.
         /// </summary>
         private void Done(Ped me)
         {
@@ -425,17 +554,24 @@ namespace Precinct88.Custody
             }
         }
 
-        private Ped Nearest(Ped me)
+        private static Ped Nearest(Ped me, float within)
         {
+            Ped best = null;
+            var bestDist = within;
+
             try
             {
-                foreach (var ped in World.GetNearbyPeds(me, Reach))
+                foreach (var ped in World.GetNearbyPeds(me, within))
                 {
                     if (!Cops.Alive(ped)) continue;
                     if (!Cops.IsCop(ped)) continue;
                     if (ped.IsInVehicle()) continue;
 
-                    return ped;
+                    var d = ped.Position.DistanceTo(me.Position);
+                    if (d >= bestDist) continue;
+
+                    bestDist = d;
+                    best = ped;
                 }
             }
             catch (Exception ex)
@@ -443,47 +579,86 @@ namespace Precinct88.Custody
                 Log.Debug("Could not find who has hold of you: " + ex.Message);
             }
 
-            return null;
+            return best;
+        }
+
+        /// <summary>
+        /// Stops the officer reacting to anything while he deals with you.
+        ///
+        /// BlockPermanentEvents is the one that does the work: it stops ambient and combat
+        /// events firing at all, which is what would otherwise override the walk-over the
+        /// moment he registers an armed man in front of him. Cleared again in Stop.
+        /// </summary>
+        private static void Safe(Ped officer)
+        {
+            try
+            {
+                officer.BlockPermanentEvents = true;
+
+                Function.Call(Hash.SET_PED_CAN_BE_TARGETTED, officer.Handle, true);
+                Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, officer.Handle, 46, false);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Could not settle an officer: " + ex.Message);
+            }
         }
 
         /// <summary>
         /// Ends it, however it ended.
         ///
-        /// THE ONLY WAY OUT, and it gives the officer back his events. An officer left with
-        /// BlockPermanentEvents set is a man who will stand in a firefight without reacting to
-        /// it, and nothing later will ever clear it for him.
+        /// THE ONLY WAY OUT, and the order in here is the order of how bad it would be to skip
+        /// each one. The cuffs come off first and unconditionally: a player left handcuffed by
+        /// a scene that died has no way to work out why and no way to undo it. Then the police
+        /// can see him again -- being permanently invisible to every officer in the game is the
+        /// same class of problem in the other direction. Only then the cosmetics.
         /// </summary>
         public void Stop(string why, int graceMs = LapsedMs)
         {
+            if (_at == Detain.None) return;
+
             var officer = _officer;
 
             _officer = null;
+            _at = Detain.None;
             _overAt = Game.GameTime + graceMs;
             _driftSince = 0;
             _warned = false;
 
-            // THE POLICE CAN SEE YOU AGAIN. Unconditional and before anything that can fail:
-            // a player left permanently ignored by every officer in the game, by a scene that
-            // ended badly, is a far worse bug than the one this was preventing.
+            var me = Game.Player.Character;
+
+            if (_cuffed)
+            {
+                _cuffed = false;
+
+                try
+                {
+                    if (me != null && me.Exists())
+                    {
+                        Function.Call(Hash.UNCUFF_PED, me.Handle);
+                        Function.Call(Hash.SET_ENABLE_HANDCUFFS, me.Handle, false);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Debug("Could not take the cuffs off: " + ex.Message);
+                }
+            }
+
             Response.LawHold.Ignore(false);
 
-            // HANDS DOWN BEFORE ANYTHING ELSE, and before the early return below. A scene that
-            // ends with nobody having been found still has a player stood in the street with
-            // his arms in the air, and nothing later would ever put them down.
             try
             {
-                Unpose(Game.Player.Character, officer);
+                Unpose(me, officer);
             }
             catch
             {
                 // The pose ends on its own when they are next re-tasked.
             }
 
-            if (officer == null) return;
-
             try
             {
-                if (officer.Exists())
+                if (officer != null && officer.Exists())
                 {
                     officer.BlockPermanentEvents = false;
                     Function.Call(Hash.TASK_CLEAR_LOOK_AT, officer.Handle);
@@ -494,7 +669,7 @@ namespace Precinct88.Custody
                 // He is gone, which is the outcome this was arranging anyway.
             }
 
-            Log.Info("Search over: " + why + ".");
+            Log.Info("Detention over: " + why + ".");
         }
     }
 }

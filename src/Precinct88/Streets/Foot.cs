@@ -53,6 +53,14 @@ namespace Precinct88.Streets
         /// <summary>When he may next stop and do something.</summary>
         public int NextChoreAt;
 
+        /// <summary>Watching something the player is doing, until when. See Reacts.</summary>
+        public int WatchUntil;
+        public int NextWatchAt;
+
+        /// <summary>Whether it alarmed him, and whether he has moved for it yet.</summary>
+        public bool Alarmed;
+        public bool Stepped;
+
         public bool Alive => Cops.Alive(Who);
 
         /// <summary>
@@ -175,6 +183,14 @@ namespace Precinct88.Streets
         /// </summary>
         private readonly Rounds _rounds;
 
+        /// <summary>
+        /// Looking up when the player does something.
+        ///
+        /// Ticked BEFORE the other two and allowed to take a man off a clipboard, because
+        /// somebody doing a burnout beside you outranks your paperwork.
+        /// </summary>
+        private readonly Reacts _reacts;
+
         /// <summary>Off while something louder is happening. Wired by Main.</summary>
         public Func<bool> Busy;
 
@@ -187,6 +203,7 @@ namespace Precinct88.Streets
             // choices all session.
             _chats = new Chats(_rng) { Repost = w => Post(w, w.PostedAt) };
             _rounds = new Rounds(_rng) { Repost = w => Post(w, w.PostedAt) };
+            _reacts = new Reacts(_rng) { Repost = w => Post(w, w.PostedAt) };
         }
 
         public int Count => _out.Count;
@@ -215,6 +232,11 @@ namespace Precinct88.Streets
             // still be able to end the sentence -- otherwise the officer holds a look-at at a
             // man until the gang war is over, which is a considerably stranger sight than the
             // conversation was. Only STARTING one is gated on things being quiet.
+            // FIRST OF THE THREE. It is the only one that is about the player rather than
+            // about the officer, and a man who has just been given a clipboard cannot look up
+            // from it on the same tick -- so it gets first refusal on everybody.
+            _reacts.Update(_out, now, quiet);
+
             _chats.Update(_out, now, quiet);
 
             // AFTER CHATS, so somebody who has just been given a conversation is not also

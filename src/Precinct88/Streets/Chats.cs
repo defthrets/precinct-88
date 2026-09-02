@@ -21,6 +21,9 @@ namespace Precinct88.Streets
 
         /// <summary>Stopped, doing something of his own. See Rounds.</summary>
         Busy,
+
+        /// <summary>Looking at something the player is doing. See Reacts.</summary>
+        Watching,
     }
 
     /// <summary>
