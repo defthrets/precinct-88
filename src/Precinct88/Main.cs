@@ -355,6 +355,13 @@ namespace Precinct88
                          ", search " + (inspect ? "ok" : "MISSING") +
                          ", radio " + (radio ? "ok" : "MISSING") +
                          ", arrest " + (cuffs ? "ok" : "MISSING") + ".");
+
+                // The one PROP this mod spawns, and a guessed name like the clips above. If it
+                // is missing the arrest still happens with nothing on his wrists, which looks
+                // exactly like the bug it was written to fix -- so the log says which it is.
+                var irons = new Model("p_cs_cuffs_02");
+
+                Log.Info("Handcuff prop: " + (irons.IsValid ? "ok" : "MISSING") + ".");
             }
             catch (Exception ex)
             {

@@ -206,6 +206,9 @@ namespace Precinct88.Custody
         /// <summary>Whether he is walking like a man in handcuffs.</summary>
         private bool _walksCuffed;
 
+        /// <summary>The actual pair on his wrists. See Irons.</summary>
+        private readonly Irons _irons = new Irons();
+
         private Ped _officer;
         private Detain _at = Detain.None;
 
@@ -638,6 +641,11 @@ namespace Precinct88.Custody
                 {
                     Function.Call(Hash.SET_ENABLE_HANDCUFFS, me.Handle, true);
 
+                    // AND THE CUFFS THEMSELVES, at the same moment as the other two. See Irons
+                    // for why these are three separate things and why any two of them without
+                    // the third reads as a bug rather than as an omission.
+                    _irons.Cuff(me);
+
                     // AND HE HAS TO LOOK CUFFED, WHICH IS A SEPARATE THING ENTIRELY.
                     // SET_ENABLE_HANDCUFFS restrains him -- it is the mechanics -- and does
                     // nothing whatever about how he stands or walks. The movement clipset is
@@ -996,6 +1004,11 @@ namespace Precinct88.Custody
             _warned = false;
 
             var me = Game.Player.Character;
+
+            // OFF FIRST AND UNCONDITIONALLY, whatever else is true. A prop attached to the
+            // player by a script that is no longer running has nothing left in the world that
+            // could ever remove it.
+            _irons.Free();
 
             if (_cuffed || _walksCuffed)
             {
