@@ -61,6 +61,15 @@ namespace Precinct88.Streets
         public bool Alarmed;
         public bool Stepped;
 
+        /// <summary>The corners of his round, and which one he is walking to. See Route.</summary>
+        public List<Vector3> Circuit;
+        public int Leg;
+        public int LegUntil;
+
+        /// <summary>Consecutive legs he failed to walk, and whether he has given up.</summary>
+        public int Legs;
+        public bool Adrift;
+
         public bool Alive => Cops.Alive(Who);
 
         /// <summary>
@@ -191,6 +200,15 @@ namespace Precinct88.Streets
         /// </summary>
         private readonly Reacts _reacts;
 
+        /// <summary>
+        /// Where he is walking, and in what order.
+        ///
+        /// Ticked LAST of the four, and only for a man nothing else has claimed. It is the
+        /// default behaviour -- what he does when there is nobody to talk to, nothing to write
+        /// up and nothing to look at -- so everything else gets first refusal on him.
+        /// </summary>
+        private readonly Route _route;
+
         /// <summary>Off while something louder is happening. Wired by Main.</summary>
         public Func<bool> Busy;
 
@@ -204,6 +222,7 @@ namespace Precinct88.Streets
             _chats = new Chats(_rng) { Repost = w => Post(w, w.PostedAt) };
             _rounds = new Rounds(_rng) { Repost = w => Post(w, w.PostedAt) };
             _reacts = new Reacts(_rng) { Repost = w => Post(w, w.PostedAt) };
+            _route = new Route(_rng);
         }
 
         public int Count => _out.Count;
@@ -243,6 +262,9 @@ namespace Precinct88.Streets
             // handed a clipboard on the same tick. Chats takes him out of Posted, and Rounds
             // only ever looks at men who are still in it.
             _rounds.Update(_out, now, quiet);
+
+            // LAST, because walking his round is what he does when nothing else has him.
+            _route.Update(_out, now, quiet);
 
             if (!quiet) return;
 
@@ -422,16 +444,21 @@ namespace Precinct88.Streets
 
                 if (walker.Wanders)
                 {
-                    // A ROUND RATHER THAN A WANDER ACROSS THE MAP, and the three numbers after
-                    // the position are the whole of what that means.
+                    // ROUTE DRIVES HIM NOW, and this deliberately issues no task at all for a
+                    // man who has one. Zeroing the leg clock is the whole handover: Route sees
+                    // an expired leg on its next pass and re-issues the corner he was walking
+                    // to, so he picks his round back up where he left it rather than starting
+                    // a new one every time a conversation ends.
                     //
-                    // 130 is the radius -- about a city block rather than the sixty metres it
-                    // was, which had him turning round in the middle of a street for no reason
-                    // a player could see. 26 is the MINIMUM LENGTH OF ONE LEG and is the number
-                    // that actually changed how he reads: at 3 he took a few steps, stopped,
-                    // and picked somewhere else, which is a man who has lost his keys. And 2 is
-                    // the pause between legs, down from 8, because the standing about is now
-                    // Rounds' job and it does it with a clipboard in his hand.
+                    // A man who has given up on routes gets the old wander, which is still the
+                    // right answer for geometry the nav mesh will not cross.
+                    walker.LegUntil = 0;
+
+                    if (!walker.Adrift) return;
+
+                    // 130 is about a city block. 26 is the minimum length of one leg and is the
+                    // number that mattered: at 3 he took a few steps, stopped, and picked
+                    // somewhere else, which is a man who has lost his keys.
                     Function.Call(Hash.TASK_WANDER_IN_AREA, walker.Who.Handle,
                                   spot.X, spot.Y, spot.Z, 130f, 26f, 2f);
                     return;
