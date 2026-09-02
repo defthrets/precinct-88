@@ -52,8 +52,27 @@ namespace Precinct88.Streets
         /// </summary>
         private const int LegMs = 65000;
 
-        /// <summary>Walking pace. An officer who jogs his round is late for something.</summary>
-        private const float Pace = 1.0f;
+        /// <summary>
+        /// KEEP TO PAVEMENTS, and this one flag is the whole of the fix.
+        ///
+        /// TASK_WANDER_IN_AREA never had this problem -- the engine's own wander stays on
+        /// pavements because that is what it is for. Routing by nav mesh does not: it solves
+        /// for distance across walkable ground, and a carriageway is extremely walkable. So
+        /// replacing the wander with a route quietly traded pavement adherence for purpose,
+        /// and every fix since has been me detecting the result afterwards and dragging men
+        /// back onto the kerb.
+        ///
+        /// The nav system has a flag for exactly this and it was there the whole time. It is
+        /// PREFERENTIAL rather than absolute -- he will still cross a road, because a route
+        /// with corners on both sides of a street needs him to -- but he will not walk down
+        /// one to save forty metres.
+        ///
+        /// Through SHVDN's wrapper rather than the native by hand: the advanced form takes
+        /// thirteen arguments in an order that is documented three different ways, and getting
+        /// it wrong reads as a ped who simply does not move.
+        /// </summary>
+        private const FollowNavMeshFlags OnPaths =
+            FollowNavMeshFlags.KeepToPavements | FollowNavMeshFlags.NeverEnterWater;
 
         /// <summary>How many legs may fail before he gives up on routes entirely.</summary>
         private const int GiveUpAfter = 2;
@@ -67,10 +86,10 @@ namespace Precinct88.Streets
         /// this is not a rule about roads, it is a rule about DWELLING on them: six seconds is
         /// far longer than any crossing takes and far shorter than a walk down one.
         /// </summary>
-        private const int RoadGraceMs = 6000;
+        private const int RoadGraceMs = 3000;
 
         /// <summary>How often the road check runs. It is two natives, but not free.</summary>
-        private const int RoadCheckMs = 1500;
+        private const int RoadCheckMs = 700;
 
         /// <summary>How many goes at placing one corner before it is left out.</summary>
         private const int Tries = 5;
@@ -174,9 +193,8 @@ namespace Precinct88.Streets
 
             try
             {
-                Function.Call(Hash.TASK_FOLLOW_NAV_MESH_TO_COORD, walker.Who.Handle,
-                              target.X, target.Y, target.Z, Pace, LegMs,
-                              ThereRange * 0.7f, 0, 0f);
+                walker.Who.Task.FollowNavMeshTo(target, PedMoveBlendRatio.Walk, LegMs,
+                                                ThereRange * 0.7f, OnPaths, 0f);
             }
             catch (Exception ex)
             {
@@ -253,8 +271,8 @@ namespace Precinct88.Streets
 
             try
             {
-                Function.Call(Hash.TASK_FOLLOW_NAV_MESH_TO_COORD, walker.Who.Handle,
-                              kerb.X, kerb.Y, kerb.Z, Pace, 14000, 1.5f, 0, 0f);
+                walker.Who.Task.FollowNavMeshTo(kerb, PedMoveBlendRatio.Walk, 14000,
+                                                1.5f, OnPaths, 0f);
             }
             catch (Exception ex)
             {
