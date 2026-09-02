@@ -42,6 +42,17 @@ namespace Precinct88.Streets
         /// <summary>When somebody says the next thing.</summary>
         public int NextLineAt;
 
+        /// <summary>When the notepad comes out mid-conversation, and whether it has.</summary>
+        public int NotepadAt;
+        public bool Writing;
+
+        /// <summary>What he has stopped to do, and until when. See Rounds.</summary>
+        public Chore Chore;
+        public int BusyUntil;
+
+        /// <summary>When he may next stop and do something.</summary>
+        public int NextChoreAt;
+
         public bool Alive => Cops.Alive(Who);
 
         /// <summary>
@@ -106,8 +117,15 @@ namespace Precinct88.Streets
         private const float SpawnNear = 55f;
         private const float SpawnFar = 110f;
 
-        /// <summary>Past this he is somebody else's problem.</summary>
-        private const float LetGoRange = 190f;
+        /// <summary>
+        /// Past this he is somebody else's problem.
+        ///
+        /// RAISED WITH THE ROUND, and it has to be. An officer given a hundred and thirty
+        /// metres to cover who is let go at a hundred and ninety is an officer deleted halfway
+        /// through his own round the moment the player walks the other way -- which reads as
+        /// foot patrols that vanish rather than as one that went round the corner.
+        /// </summary>
+        private const float LetGoRange = 260f;
 
         /// <summary>How long between one going out and the next, before the dice.</summary>
         private const int GapMinMs = 30000;
@@ -148,6 +166,15 @@ namespace Precinct88.Streets
         /// </summary>
         private readonly Chats _chats;
 
+        /// <summary>
+        /// What he does when he stops.
+        ///
+        /// Its own object beside Chats rather than more of this file, and the two never fight:
+        /// both act only on a walker in Errand.Posted and both hand him back to it, so a man
+        /// crossing the road to speak to somebody cannot also be getting his notepad out.
+        /// </summary>
+        private readonly Rounds _rounds;
+
         /// <summary>Off while something louder is happening. Wired by Main.</summary>
         public Func<bool> Busy;
 
@@ -159,6 +186,7 @@ namespace Precinct88.Streets
             // same tick is the classic way to get two systems making identical "random"
             // choices all session.
             _chats = new Chats(_rng) { Repost = w => Post(w, w.PostedAt) };
+            _rounds = new Rounds(_rng) { Repost = w => Post(w, w.PostedAt) };
         }
 
         public int Count => _out.Count;
@@ -188,6 +216,11 @@ namespace Precinct88.Streets
             // man until the gang war is over, which is a considerably stranger sight than the
             // conversation was. Only STARTING one is gated on things being quiet.
             _chats.Update(_out, now, quiet);
+
+            // AFTER CHATS, so somebody who has just been given a conversation is not also
+            // handed a clipboard on the same tick. Chats takes him out of Posted, and Rounds
+            // only ever looks at men who are still in it.
+            _rounds.Update(_out, now, quiet);
 
             if (!quiet) return;
 
@@ -262,13 +295,21 @@ namespace Precinct88.Streets
                 {
                     Who = who,
                     OffDutyAt = now + ShiftMinMs + _rng.Next(ShiftMaxMs - ShiftMinMs),
-                    Wanders = _rng.Next(100) < 60,
+                    // MOST OF THEM WALK NOW. It was a sixty-forty split when walking was
+                    // all a walker could do and two men stood on corners were the variety. The
+                    // variety is what he does when he stops, so the ones who never move are
+                    // the ones with nothing to show.
+                    Wanders = _rng.Next(100) < 82,
                     PostedAt = spot,
 
                     // Not immediately. An officer who materialises and walks straight at the
                     // nearest person is a spawn with a task on it; one who has been on the
                     // street a while first is an officer.
                     NextChatAt = now + 8000 + _rng.Next(20000),
+
+                    // Staggered against the chat clock so the two do not come due together and
+                    // give every officer the same rhythm.
+                    NextChoreAt = now + 18000 + _rng.Next(40000),
                 };
 
                 Post(walker, spot);
@@ -350,12 +391,27 @@ namespace Precinct88.Streets
 
             try
             {
+                // CLEARED FIRST, ALWAYS, and this one line is why it lives here rather than in
+                // the two callers. A scenario -- the clipboard he was writing on, the phone he
+                // was on -- does not reliably give way to a wander task issued on top of it,
+                // and when it does not, an officer stands writing in the air for the rest of
+                // his shift. On a fresh spawn there is nothing to clear and it costs nothing.
+                walker.Who.Task.ClearAll();
+
                 if (walker.Wanders)
                 {
-                    // A beat rather than a wander across the map: he stays roughly where he was
-                    // put, which is what makes him feel assigned to a street.
+                    // A ROUND RATHER THAN A WANDER ACROSS THE MAP, and the three numbers after
+                    // the position are the whole of what that means.
+                    //
+                    // 130 is the radius -- about a city block rather than the sixty metres it
+                    // was, which had him turning round in the middle of a street for no reason
+                    // a player could see. 26 is the MINIMUM LENGTH OF ONE LEG and is the number
+                    // that actually changed how he reads: at 3 he took a few steps, stopped,
+                    // and picked somewhere else, which is a man who has lost his keys. And 2 is
+                    // the pause between legs, down from 8, because the standing about is now
+                    // Rounds' job and it does it with a clipboard in his hand.
                     Function.Call(Hash.TASK_WANDER_IN_AREA, walker.Who.Handle,
-                                  spot.X, spot.Y, spot.Z, 60f, 3f, 8f);
+                                  spot.X, spot.Y, spot.Z, 130f, 26f, 2f);
                     return;
                 }
 

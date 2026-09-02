@@ -18,6 +18,9 @@ namespace Precinct88.Streets
 
         /// <summary>Stood with them, talking.</summary>
         Talking,
+
+        /// <summary>Stopped, doing something of his own. See Rounds.</summary>
+        Busy,
     }
 
     /// <summary>
@@ -75,6 +78,19 @@ namespace Precinct88.Streets
         /// <summary>How often somebody says something once they are talking.</summary>
         private const int LineGapMinMs = 3500;
         private const int LineGapMaxMs = 8000;
+
+        /// <summary>
+        /// How far into a conversation the notepad comes out.
+        ///
+        /// NOT AT THE START, and the delay is the whole idea. An officer who walks up already
+        /// writing has decided the outcome before he has heard anything; one who listens for a
+        /// while and THEN gets his notepad out has heard something worth writing down. It is
+        /// the same information either way -- the timing is the entire performance.
+        /// </summary>
+        private const float NotepadAfter = 0.45f;
+
+        /// <summary>Taking a statement. The one scenario that reads as police work.</summary>
+        private const string Notepad = "WORLD_HUMAN_CLIPBOARD";
 
         /// <summary>The magic float TASK_GO_TO_ENTITY wants in its second-to-last slot.</summary>
         private const float GoToDefault = 1073741824f;
@@ -274,6 +290,8 @@ namespace Precinct88.Streets
             walker.Doing = Errand.Talking;
             walker.StateUntil = now + length;
             walker.NextLineAt = now + LineGapMinMs;
+            walker.NotepadAt = now + (int)(length * NotepadAfter);
+            walker.Writing = false;
 
             // Face each other. Without this they end up talking past one another, which is
             // the single thing that makes a scripted conversation obvious at a glance.
@@ -308,6 +326,29 @@ namespace Precinct88.Streets
 
             if (now > walker.StateUntil) { Done(walker, now); return; }
 
+            // OUT IT COMES. Once, not every pass -- TASK_START_SCENARIO_IN_PLACE restarts
+            // from the top each time it is called, so re-issuing it holds him permanently on
+            // the first frame of getting the notepad out and he never writes anything.
+            if (!walker.Writing && now >= walker.NotepadAt)
+            {
+                walker.Writing = true;
+
+                try
+                {
+                    Function.Call(Hash.TASK_START_SCENARIO_IN_PLACE, walker.Who.Handle,
+                                  Notepad, 0, true);
+
+                    // The look-at survives the scenario and is what keeps him facing the person
+                    // he is writing about rather than facing his own notes.
+                    Function.Call(Hash.TASK_LOOK_AT_ENTITY, walker.Who.Handle, them.Handle,
+                                  walker.StateUntil - now, 0, 2);
+                }
+                catch (Exception ex)
+                {
+                    Log.Debug("Could not get the notepad out: " + ex.Message);
+                }
+            }
+
             if (now < walker.NextLineAt) return;
 
             walker.NextLineAt = now + LineGapMinMs + _rng.Next(LineGapMaxMs - LineGapMinMs);
@@ -334,6 +375,7 @@ namespace Precinct88.Streets
             walker.Subject = null;
             walker.Doing = Errand.Posted;
             walker.StateUntil = 0;
+            walker.Writing = false;
             walker.NextChatAt = now + GapMinMs + _rng.Next(GapMaxMs - GapMinMs);
 
             try
