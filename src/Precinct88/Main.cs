@@ -281,6 +281,14 @@ namespace Precinct88
                 if (_status != null) _status.Draw();
 
                 Dialogue.Draw();
+
+                // BUSTED, and it is drawn HERE rather than in Custody for the same reason
+                // everything else in this finally is: it has to happen every frame and on top
+                // of whatever else went up. The engine has its own and puts it there when its
+                // arrest fires -- but that is handed over at the end of the state below, so
+                // without this there is a stretch of a man stood in handcuffs with the game
+                // saying nothing at all.
+                if (_search != null && _search.Booked) Screen.Busted();
             }
         }
 

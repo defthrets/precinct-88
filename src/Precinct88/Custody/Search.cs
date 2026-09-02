@@ -122,6 +122,15 @@ namespace Precinct88.Custody
         /// <summary>How far through the clip the cuffs actually meet his wrists.</summary>
         private const float CuffsOnAt = 0.62f;
 
+        /// <summary>How often it is a takedown rather than simply being taken hold of.</summary>
+        private const int TackleChance = 45;
+
+        /// <summary>How long he is on the floor for before being picked up and cuffed.</summary>
+        private const int TackleMs = 1600;
+
+        /// <summary>What a cuffed man walks like.</summary>
+        private const string CuffedWalk = "move_m@prisoner_cuffed";
+
         /// <summary>And how long the search itself takes once they are on.</summary>
         private const int SearchMs = 4200;
 
@@ -190,6 +199,13 @@ namespace Precinct88.Custody
         /// <summary>The paired arrest scene, or -1 when there is not one.</summary>
         private int _scene = -1;
 
+        /// <summary>Whether this one starts by putting him on the floor, and when it did.</summary>
+        private bool _tackle;
+        private int _tackledAt;
+
+        /// <summary>Whether he is walking like a man in handcuffs.</summary>
+        private bool _walksCuffed;
+
         private Ped _officer;
         private Detain _at = Detain.None;
 
@@ -218,6 +234,15 @@ namespace Precinct88.Custody
 
         /// <summary>Whether somebody is being dealt with right now.</summary>
         public bool Running => _at != Detain.None;
+
+        /// <summary>
+        /// Whether he is cuffed and waiting to be taken in, for Main to say so on screen.
+        ///
+        /// The word BUSTED belongs to the engine and the engine puts it up when its own arrest
+        /// fires -- but that arrest is handed over at the END of this state, so there is a
+        /// gap between a man being in handcuffs and the game admitting it. Main fills it.
+        /// </summary>
+        public bool Booked => _at == Detain.Booking;
 
         /// <summary>
         /// Called EVERY FRAME by Main, and the frame part is load-bearing.
@@ -412,7 +437,14 @@ namespace Precinct88.Custody
                 // It is a courtesy rather than a requirement, so a kerb that cannot be found
                 // simply skips the step. A scene that stalls because the pavement was on the
                 // other side of a fence would be worse than the thing it was avoiding.
-                if (Pave.OnRoad(me.Position) && Pave.Kerb(me.Position, _rng, out _kerb))
+                // ROLLED HERE RATHER THAN AT THE CUFFS, so a takedown happens the moment he
+                // reaches you rather than after a polite walk to the pavement. Being tackled
+                // and then escorted somewhere is two different arrests in a row.
+                _tackle = _rng.Next(100) < TackleChance;
+                _tackledAt = 0;
+
+                if (!_tackle && Pave.OnRoad(me.Position) &&
+                    Pave.Kerb(me.Position, _rng, out _kerb))
                 {
                     _at = Detain.Walking;
                     _phaseAt = now;
@@ -521,6 +553,41 @@ namespace Precinct88.Custody
         {
             if (apart > Gone) { Stop("he took off"); return; }
 
+            // ON THE FLOOR FIRST, SOMETIMES. The paired clip is a man being taken hold of and
+            // turned round, which reads as the END of a struggle rather than the whole of one
+            // -- so about half the time there is a struggle in front of it. He goes down, he is
+            // picked up, and the same cuffs go on.
+            //
+            // SET_PED_TO_RAGDOLL rather than an animation, because a scripted fall is a
+            // performance and a ragdoll is an accident, and this wants to look like an accident.
+            if (_tackle && _tackledAt == 0)
+            {
+                _tackledAt = now;
+
+                try
+                {
+                    Function.Call(Hash.SET_PED_TO_RAGDOLL, me.Handle,
+                                  TackleMs, TackleMs, 0, true, true, false);
+                }
+                catch (Exception ex)
+                {
+                    Log.Debug("Could not take him down: " + ex.Message);
+                    _tackle = false;
+                }
+
+                Cops.Say(_officer, "GENERIC_CURSE_HIGH");
+                Screen.Help("Taken down.");
+                return;
+            }
+
+            // Still on the floor. Nothing starts until he is back on his feet, or the cuffs go
+            // on to a man mid-ragdoll and the scene spends its length fighting the physics.
+            if (_tackle && now - _tackledAt < TackleMs)
+            {
+                Screen.Help("Taken down.");
+                return;
+            }
+
             // THE ARREST ITSELF, STARTED ONCE. Both halves of a paired clip on one clock --
             // the officer takes hold of him, turns him round, and puts the cuffs on behind his
             // back, because that is what the animators drew. Anim.Pair explains why the scene
@@ -529,19 +596,26 @@ namespace Precinct88.Custody
             {
                 Cops.Say(_officer, "ARREST_PLAYER");
 
-                // THE ANCHOR IS THE OFFICER, NOT THE SUSPECT, and getting that the wrong way
-                // round is what put the two of them inside each other.
+                // ANCHORED JUST BEHIND YOU, FACING AWAY FROM HIM -- not on either man.
                 //
-                // Both halves of a paired clip are offsets from one shared anchor, so the
-                // anchor decides who does not move. In this pair the COP's half sits almost
-                // exactly on it -- anchor the scene at the player's feet and the officer is
-                // placed at the player's feet, which is precisely what it looked like.
+                // Both halves are offsets from one point and the cop's half sits on it, so the
+                // anchor is wherever the OFFICER should end up: a pace behind you, on the far
+                // side from where he is standing. Then nobody is teleported anywhere they were
+                // not already. Anchoring on the officer moved YOU to him, which is why an
+                // arrest that had just walked to the pavement snapped back into the road.
                 //
-                // Anchored on the officer he stays where he walked to, and the player is drawn
-                // into position in front of him -- which is also the right way round for the
-                // fiction: he is the one taking hold of somebody.
+                // The heading points from him to you, so you end up facing away from him, which
+                // is the turn the clip is drawn around.
+                var dir = me.Position - _officer.Position;
+                dir.Z = 0f;
+
+                if (dir.Length() < 0.2f) dir = me.ForwardVector;
+                dir.Normalize();
+
+                var facing = (float)(Math.Atan2(-dir.X, dir.Y) * 180d / Math.PI);
+
                 _scene = Anim.Pair(_officer, Anim.CopCuffs, me, Anim.CrookCuffed,
-                                   Anim.ArrestDict, _officer.Position, _officer.Heading);
+                                   Anim.ArrestDict, me.Position - dir * 0.85f, facing);
 
                 if (_scene < 0)
                 {
@@ -563,6 +637,19 @@ namespace Precinct88.Custody
                 try
                 {
                     Function.Call(Hash.SET_ENABLE_HANDCUFFS, me.Handle, true);
+
+                    // AND HE HAS TO LOOK CUFFED, WHICH IS A SEPARATE THING ENTIRELY.
+                    // SET_ENABLE_HANDCUFFS restrains him -- it is the mechanics -- and does
+                    // nothing whatever about how he stands or walks. The movement clipset is
+                    // what puts his hands behind his back and keeps them there for as long as
+                    // he is held, rather than only for the length of one clip.
+                    Function.Call(Hash.REQUEST_CLIP_SET, CuffedWalk);
+
+                    if (Function.Call<bool>(Hash.HAS_CLIP_SET_LOADED, CuffedWalk))
+                    {
+                        Function.Call(Hash.SET_PED_MOVEMENT_CLIPSET, me.Handle, CuffedWalk, 1f);
+                        _walksCuffed = true;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -600,7 +687,7 @@ namespace Precinct88.Custody
 
             _at = Detain.Booking;
 
-            Dialogue.Say("Officer", "You are under arrest. Watch your head.", BookingMs);
+            Dialogue.Say("Officer", "You are under arrest. Stop resisting.", BookingMs);
 
             // AND HE HAS TO BE ALLOWED TO REACT AGAIN, which is why the bust never came.
             // BlockPermanentEvents was put on him so nothing could interrupt the walk over and
@@ -664,7 +751,8 @@ namespace Precinct88.Custody
         /// </summary>
         private void Booking(Ped me, int now)
         {
-            Screen.Help("Under arrest.");
+            // The clipset is still holding his hands behind his back, so there is nothing to
+            // pose. Busted is drawn by Main, which is the only thing that draws every frame.
             Pose(me);
 
             if (now - _phaseAt > BookingMs) Stop("the bust never came");
@@ -901,13 +989,15 @@ namespace Precinct88.Custody
             _officer = null;
             _at = Detain.None;
             _scene = -1;
+            _tackle = false;
+            _tackledAt = 0;
             _overAt = Game.GameTime + graceMs;
             _driftSince = 0;
             _warned = false;
 
             var me = Game.Player.Character;
 
-            if (_cuffed)
+            if (_cuffed || _walksCuffed)
             {
                 _cuffed = false;
 
@@ -917,12 +1007,23 @@ namespace Precinct88.Custody
                     {
                         Function.Call(Hash.UNCUFF_PED, me.Handle);
                         Function.Call(Hash.SET_ENABLE_HANDCUFFS, me.Handle, false);
+
+                        // AND HE WALKS NORMALLY AGAIN. A movement clipset is not a task and
+                        // nothing clears it on its own -- left on, the player walks with his
+                        // hands behind his back for the rest of the session, which is the
+                        // single most likely thing in this file to be blamed on another mod.
+                        if (_walksCuffed)
+                        {
+                            Function.Call(Hash.RESET_PED_MOVEMENT_CLIPSET, me.Handle, 0.4f);
+                        }
                     }
                 }
                 catch (Exception ex)
                 {
                     Log.Debug("Could not take the cuffs off: " + ex.Message);
                 }
+
+                _walksCuffed = false;
             }
 
             Response.LawHold.Ignore(false);

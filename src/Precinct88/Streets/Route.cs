@@ -41,8 +41,17 @@ namespace Precinct88.Streets
         private const float LegMin = 38f;
         private const float LegMax = 78f;
 
-        /// <summary>Close enough to have arrived.</summary>
-        private const float ThereRange = 4.5f;
+        /// <summary>
+        /// Close enough to have arrived.
+        ///
+        /// GENEROUS, BECAUSE HE IS NOT WALKING TO A POINT ANY MORE. He is sent to an AREA and
+        /// left to potter about in it -- see Walk -- so demanding he stand on the exact metre
+        /// would mean a corner he had plainly reached and was never credited with.
+        /// </summary>
+        private const float ThereRange = 13f;
+
+        /// <summary>How big the area at each corner is.</summary>
+        private const float Loiter = 14f;
 
         /// <summary>
         /// How long one leg may take before it is written off.
@@ -70,6 +79,14 @@ namespace Precinct88.Streets
         /// Through SHVDN's wrapper rather than the native by hand: the advanced form takes
         /// thirteen arguments in an order that is documented three different ways, and getting
         /// it wrong reads as a ped who simply does not move.
+        /// </summary>
+        /// <summary>
+        /// Kept for the ONE walk that is not part of a round: getting off a carriageway.
+        ///
+        /// Legs are walked by TASK_WANDER_IN_AREA now, which uses the ped path network and
+        /// therefore the crossings. That is the right tool for going somewhere and the wrong
+        /// one for getting off a road immediately, because a wander is a suggestion and this
+        /// is not -- so the kerb walk stays a direct nav-mesh route, told to prefer pavements.
         /// </summary>
         private const FollowNavMeshFlags OnPaths =
             FollowNavMeshFlags.KeepToPavements | FollowNavMeshFlags.NeverEnterWater;
@@ -206,8 +223,19 @@ namespace Precinct88.Streets
 
             try
             {
-                walker.Who.Task.FollowNavMeshTo(target, PedMoveBlendRatio.Walk, LegMs,
-                                                ThereRange * 0.7f, OnPaths, 0f);
+                // THE ENGINE WALKS HIM. TASK_WANDER_IN_AREA is the only thing in the game that
+                // knows how a pedestrian gets about: it uses the ped path network, which is
+                // where the crossings are, so he waits at the kerb and crosses at the markings
+                // like everybody else. Nav-mesh routing knows none of that -- it solves for
+                // distance over walkable ground and will happily send a man diagonally across
+                // six lanes because it is shorter, which is exactly what it was doing.
+                //
+                // The route survives because the AREA moves. He is sent to potter about at one
+                // corner, and when he gets there he is sent to the next -- so the walking is
+                // the game's and the itinerary is ours, which is the right division of labour
+                // and the one this file should have started with.
+                Function.Call(Hash.TASK_WANDER_IN_AREA, walker.Who.Handle,
+                              target.X, target.Y, target.Z, Loiter, 8f, 2f);
             }
             catch (Exception ex)
             {

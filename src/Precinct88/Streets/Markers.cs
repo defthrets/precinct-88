@@ -103,7 +103,7 @@ namespace Precinct88.Streets
                         // changes minute to minute and is the only reason to look at the map.
                         var mood = Of(unit, me, stars);
 
-                        Mark(unit.Car, Sprite(unit), Paint(mood), Called(mood),
+                        Mark(unit.Car, Sprite(mood, false), Paint(mood), Called(mood),
                              Size(mood, 0.6f), mood == Mood.Chasing);
                     }
                 }
@@ -122,7 +122,7 @@ namespace Precinct88.Streets
                         // for what is the same thing standing up.
                         var mood = Of(walker, me, stars);
 
-                        Mark(walker.Who, BlipSprite.Standard, Paint(mood), Called(mood),
+                        Mark(walker.Who, Sprite(mood, true), Paint(mood), Called(mood),
                              Size(mood, 0.45f), mood == Mood.Chasing);
                     }
                 }
@@ -185,15 +185,21 @@ namespace Precinct88.Streets
             return Mood.Patrol;
         }
 
+        /// <summary>
+        /// POLICE BLUE, EXCEPT WHEN HE HAS SEEN YOU.
+        ///
+        /// Red was wrong and it was wrong in an interesting way: it read as an ENEMY marker,
+        /// because red on a minimap in this game means something hostile. These are police,
+        /// they are police the whole time, and a car answering a call is not a different
+        /// faction from one that is not.
+        ///
+        /// So the state is carried by SHAPE, SIZE and FLASHING instead -- see Sprite and Size
+        /// -- and the only colour that survives is the amber for having clocked you, which is
+        /// the one state that genuinely is about you rather than about him.
+        /// </summary>
         private static BlipColor Paint(Mood mood)
         {
-            switch (mood)
-            {
-                case Mood.Watching: return Eyes;
-                case Mood.Responding: return Hot;
-                case Mood.Chasing: return Hot;
-                default: return Police;
-            }
+            return mood == Mood.Watching ? Eyes : Police;
         }
 
         private static string Called(Mood mood)
@@ -243,9 +249,16 @@ namespace Precinct88.Streets
         /// and the next thing to try is a different blue, since sprite 1 in BlipColor.Blue is
         /// exactly the game's own friend marker.
         /// </summary>
-        private static BlipSprite Sprite(Unit unit)
+        private static BlipSprite Sprite(Mood mood, bool onFoot)
         {
-            return BlipSprite.Standard;
+            // THE GAME'S OWN POLICE ART, and now that colour is no longer carrying the state
+            // there is room for it. A dot for ordinary patrol, because that is what a patrol
+            // car is on a vanilla minimap and the row of them should not shout; the marked
+            // police blip once he is doing something about you, because that is exactly what
+            // the game uses it for.
+            if (mood == Mood.Patrol) return BlipSprite.Standard;
+
+            return onFoot ? BlipSprite.PoliceOfficer : BlipSprite.PoliceCarDot;
         }
 
         /// <summary>
@@ -258,9 +271,6 @@ namespace Precinct88.Streets
 
         /// <summary>Clocked you. Not coming yet, but you are the thing he is looking at.</summary>
         private const BlipColor Eyes = BlipColor.Yellow;
-
-        /// <summary>On a call, or on you.</summary>
-        private const BlipColor Hot = BlipColor.Red;
 
         /// <summary>How far off an officer counts as being on you rather than nearby.</summary>
         private const float OnYou = 55f;

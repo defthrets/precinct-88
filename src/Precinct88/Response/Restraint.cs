@@ -75,6 +75,35 @@ namespace Precinct88.Response
         private const float GunSeenRange = 45f;
 
         /// <summary>
+        /// Whether the gun is actually ON SHOW.
+        ///
+        /// A WEAPON IN A CAR IS NOT A WEAPON IN THE STREET. Half of everybody in this game
+        /// drives around with a rifle equipped because that is simply what was in your hands
+        /// when you got in -- it is not visible, it is not being presented to anybody, and
+        /// treating it as brandishing meant you could not drive past a police car without a
+        /// ten second countdown starting.
+        ///
+        /// AIMING IT IS DIFFERENT, and is the one thing a driver can do that anybody outside
+        /// the car can see. So: on foot with a gun out counts, and in a car it only counts if
+        /// you are pointing it.
+        /// </summary>
+        private static bool OnShow(Ped me)
+        {
+            try
+            {
+                if (!Cops.HasGun(me)) return false;
+
+                if (!me.IsInVehicle()) return true;
+
+                return Function.Call<bool>(Hash.IS_PLAYER_FREE_AIMING, Game.Player.Handle);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
         /// How close he has to be before he is given the stun gun at all.
         ///
         /// SETTING THE COMBAT RANGE TO "NEAR" WAS NOT ENOUGH, and this is why. Near, to the
@@ -119,6 +148,12 @@ namespace Precinct88.Response
         private int _gunSince;
         private bool _told;
 
+        /// <summary>Whether the gun has already cost a star. It only costs one.</summary>
+        private bool _charged;
+
+        /// <summary>Last tick's star count, so a drop to nothing can be noticed.</summary>
+        private int _wasStars;
+
         public Restraint(Settings cfg)
         {
             _cfg = cfg;
@@ -150,6 +185,23 @@ namespace Precinct88.Response
                 //
                 // BUT IT DOES NOT OUTRANK IT INSTANTLY. See GunGraceMs -- he is shouted at
                 // first, and the ten seconds after that are his to spend.
+                // CLEARED FROM OUTSIDE. A trainer, another mod, or the search letting you go
+                // -- the wanted level can drop to nothing without this file being told, and
+                // everything it was holding has to let go with it. Without this the gun clock
+                // is still expired, so the star it just cost you is handed straight back.
+                if (stars == 0 && _wasStars > 0)
+                {
+                    Log.Info("Wanted level cleared; the police stand down.");
+
+                    _gunSince = 0;
+                    _told = false;
+                    _charged = false;
+
+                    Calm();
+                }
+
+                _wasStars = stars;
+
                 var overdue = Standoff(me, now);
 
                 Lethal = stars >= LethalAt || overdue;
@@ -198,12 +250,13 @@ namespace Precinct88.Response
         /// </summary>
         private bool Standoff(Ped me, int now)
         {
-            if (!Cops.HasGun(me))
+            if (!OnShow(me))
             {
-                if (_gunSince != 0) Log.Info("Gun put away; standing down.");
+                if (_gunSince != 0) Log.Info("Gun out of sight; standing down.");
 
                 _gunSince = 0;
                 _told = false;
+                _charged = false;
                 return false;
             }
 
@@ -225,6 +278,14 @@ namespace Precinct88.Response
 
                 return false;
             }
+
+            // ONE STAR, ONCE. Without this, clearing the wanted level while still holding
+            // the gun hands it straight back on the next tick -- the clock is already expired,
+            // so the player is charged again for a decision he has not made twice. Putting the
+            // gun away is what re-arms it.
+            if (_charged) return true;
+
+            _charged = true;
 
             // TIME UP, AND THIS IS THE ONE PLACE THE MOD HANDS OUT A STAR. Everything else in
             // here reacts to a wanted level somebody else created; refusing to put a firearm
@@ -248,6 +309,36 @@ namespace Precinct88.Response
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// Everybody back to normal, because it is over.
+        ///
+        /// Re-arming is not the point -- Update does that on its own the next time round. This
+        /// is about the COMBAT SETTINGS: an officer told to advance, ignore cover and fight at
+        /// arm's length keeps those orders until something takes them off him, and a man who
+        /// walks calmly at you across a car park after you have been let go is the sort of
+        /// thing nobody ever traces back to a police mod.
+        /// </summary>
+        private void Calm()
+        {
+            try
+            {
+                var me = Game.Player.Character;
+                if (me == null || !me.Exists()) return;
+
+                foreach (var ped in World.GetNearbyPeds(me, Range))
+                {
+                    if (!Cops.Alive(ped)) continue;
+                    if (!Cops.IsCop(ped)) continue;
+
+                    Close(ped, false);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Could not stand the police down: " + ex.Message);
+            }
         }
 
         /// <summary>Whether any officer can actually see him from here.</summary>

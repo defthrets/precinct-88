@@ -204,6 +204,33 @@ namespace Precinct88.UI
         }
 
         /// <summary>The width that matches a given height on this screen's aspect ratio.</summary>
+        /// <summary>
+        /// BUSTED, in the game's own word and roughly its own place.
+        ///
+        /// NOT THE ENGINE'S SCREEN, and it does not pretend to be. The real one is a scaleform
+        /// the game raises when its own arrest fires -- and this mod hands that arrest over at
+        /// the END of the cuffing, which leaves a stretch of a player stood in handcuffs with
+        /// nothing on screen saying so. This fills exactly that gap and then the engine's takes
+        /// over, which is why it is deliberately plain: two of the same thing at once would be
+        /// worse than neither.
+        ///
+        /// Drawn every frame by Main while the state lasts. No state is kept here.
+        /// </summary>
+        public static void Busted()
+        {
+            try
+            {
+                Rect(0.5f, 0.5f, 1f, 0.16f, Color.FromArgb(170, 0, 0, 0));
+
+                Text("BUSTED", 0.5f, 0.435f, 1.5f,
+                     Color.FromArgb(255, 236, 108, 96), centred: true);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Could not draw the busted banner: " + ex.Message);
+            }
+        }
+
         public static float Square(float height)
         {
             try
