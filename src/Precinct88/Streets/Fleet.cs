@@ -107,6 +107,14 @@ namespace Precinct88.Streets
 
         public int Count => _out.Count;
 
+        /// <summary>Hands a borrowed car straight back. Called when a scene ends with one.</summary>
+        public void Hand(Unit unit)
+        {
+            if (unit == null || !unit.Borrowed) return;
+
+            _out.Remove(unit);
+        }
+
         // ---- per-tick ----------------------------------------------------------
 
         public void Update()
@@ -155,6 +163,14 @@ namespace Precinct88.Streets
 
             var n = (int)Math.Round(_cfg.PatrolUnits * here.Density);
 
+            // BORROWED CARS DO NOT COUNT. They are somebody else's, here for one scene, and
+            // counting them would have the district decide it was fully policed by cars this
+            // mod did not put on the road.
+            foreach (var unit in _out)
+            {
+                if (unit.Borrowed) n++;
+            }
+
             // Always at least one where anybody polices at all. Rounding a 0.25 density down
             // to zero means Paleto Bay has no police, which is a different claim than "not
             // many".
@@ -173,6 +189,14 @@ namespace Precinct88.Streets
             for (var i = _out.Count - 1; i >= 0; i--)
             {
                 var unit = _out[i];
+
+                // A BORROWED CAR IS DROPPED THE MOMENT ITS SCENE ENDS. It was never ours to
+                // keep, and holding one would have the pool counting cars it did not put out.
+                if (unit.Borrowed && unit.Doing != Duty.Contact)
+                {
+                    _out.RemoveAt(i);
+                    continue;
+                }
 
                 var keep = unit.Update(at, _rng);
 
@@ -669,6 +693,70 @@ namespace Precinct88.Streets
             }
 
             return n;
+        }
+
+        /// <summary>
+        /// Wraps a police car that was already on the street so a scene can use it.
+        ///
+        /// THE TRAFFIC STOP COULD ONLY EVER BE RUN BY ONE OF OUR OWN CARS, of which there are
+        /// three in a district -- and with the engine's dispatch running alongside this build,
+        /// most of the police a player actually drives past are the engine's. So the system was
+        /// waiting for a coincidence: our car, near you, looking at you, at the moment you did
+        /// something, and then a dice roll. It fired ONCE in an entire evening's log.
+        ///
+        /// This is the smallest fix that changes that. Any marked car with an officer at the
+        /// wheel can be borrowed for the length of a scene, wrapped in a Unit so that
+        /// everything downstream -- lights, temper, handing back -- works unchanged.
+        ///
+        /// BORROWED, NOT ADOPTED. It is flagged, it does not count towards what the district
+        /// wants out, and Sweep drops it the moment the scene ends. Letting these into the pool
+        /// properly would mean the pool filling with cars we did not put there and never
+        /// spawning any of our own, which would hollow out the one idea this mod is built on.
+        /// </summary>
+        public Unit Adopt(Vehicle car)
+        {
+            try
+            {
+                if (!Cops.Alive(car)) return null;
+
+                var driver = car.Driver;
+                if (!Cops.Alive(driver) || !Cops.IsCop(driver)) return null;
+
+                // Already ours, in which case use the real one.
+                foreach (var had in _out)
+                {
+                    if (Cops.Alive(had.Car) && had.Car.Handle == car.Handle) return had;
+                }
+
+                var unit = new Unit
+                {
+                    Car = car,
+                    Driver = driver,
+                    Patch = Districts.At(car.Position),
+                    Borrowed = true,
+                    OffDutyAt = Game.GameTime + 600000,
+                    Interest = (float)_rng.NextDouble(),
+                    Temper = Temperament.Roll(_rng),
+                };
+
+                foreach (var ped in car.Occupants)
+                {
+                    if (ped == null || ped.Handle == driver.Handle) continue;
+                    if (!Cops.IsCop(ped)) continue;
+
+                    unit.Crew.Add(ped);
+                }
+
+                _out.Add(unit);
+
+                Log.Debug("Borrowed a police car that was already out.");
+                return unit;
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Could not borrow a police car: " + ex.Message);
+                return null;
+            }
         }
 
         /// <summary>Whichever unit owns this ped, or null. Used when an officer is shot at.</summary>

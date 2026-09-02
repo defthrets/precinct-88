@@ -195,8 +195,15 @@ namespace Precinct88.Response
 
                     _gunSince = 0;
                     _told = false;
-                    _charged = false;
 
+                    // _charged IS DELIBERATELY NOT RESET HERE, and that was the bug: the log
+                    // read "Refused to put the gun away; one star" once every one-point-one
+                    // seconds, forever. One star decays or is cleared, this saw it drop, reset
+                    // everything, found the gun still out and the clock still expired, and
+                    // charged again -- a loop with the tick rate as its period.
+                    //
+                    // Putting the gun away is what re-arms it, and nothing else. You are
+                    // charged once per decision, not once per glance.
                     Calm();
                 }
 

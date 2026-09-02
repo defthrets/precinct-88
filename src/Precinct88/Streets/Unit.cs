@@ -130,6 +130,16 @@ namespace Precinct88.Streets
         public string Force = "LSPD";
 
         /// <summary>
+        /// Whether this car was already on the street rather than put there by us.
+        ///
+        /// BORROWED UNITS ARE NOT PART OF THE POOL. They are wrapped so that a scene which
+        /// needs a Unit can have one, and dropped the moment it is finished with -- see
+        /// Fleet.Adopt. Without the distinction the pool would quietly fill with the engine's
+        /// cars and stop putting out any of its own.
+        /// </summary>
+        public bool Borrowed;
+
+        /// <summary>
         /// How the two in this car are about their job today.
         ///
         /// Rolled once when the unit goes out and kept for its whole round, exactly like

@@ -56,8 +56,14 @@ namespace Precinct88.Contact
     {
         private const int TickMs = 400;
 
-        /// <summary>How far an officer can be and still take an interest.</summary>
-        private const float NoticeRange = 46f;
+        /// <summary>
+        /// How far an officer can be and still take an interest.
+        ///
+        /// Raised with everything else here. Forty-six metres is inside the length of one
+        /// city block, and a police car has to be able to clock you from further off than the
+        /// distance it takes you to pass it.
+        /// </summary>
+        private const float NoticeRange = 72f;
 
         /// <summary>Under this you have stopped, whatever you think you are doing.</summary>
         private const float StoppedSpeed = 1.6f;
@@ -227,10 +233,14 @@ namespace Precinct88.Contact
             var worst = Violations.Worst(_violations.Live);
             if (worst == null) return;
 
+            // THE ROLL COMES FIRST NOW, and the order is not cosmetic. Watching may BORROW a
+            // police car -- wrapping somebody else's vehicle in a Unit and putting it in the
+            // pool -- and doing that before finding out whether the officer even cares means
+            // adopting and dropping a car several times a minute for nothing.
+            if (!Minded(worst.Value, me)) return;
+
             var unit = Watching(me);
             if (unit == null) return;
-
-            if (!Minded(worst.Value, me)) return;
 
             Begin(unit, worst.Value, me, now);
         }
@@ -264,6 +274,18 @@ namespace Precinct88.Contact
         }
 
         /// <summary>The nearest unit that is free, near, and actually looking at you.</summary>
+        /// <summary>
+        /// The nearest police car that is free, near, and actually looking at you.
+        ///
+        /// OURS FIRST, THEN ANYBODY'S. The pool is three cars in a district and the engine's
+        /// dispatch is running alongside this build, so most of the police a player drives past
+        /// are not ours -- and while only ours could start a stop, the whole system was waiting
+        /// on a coincidence. It fired once in an evening.
+        ///
+        /// So a car that is already on the street can be borrowed for the length of the scene.
+        /// See Fleet.Adopt: it is wrapped in a Unit, it does not join the pool, and it is
+        /// handed straight back when the stop ends.
+        /// </summary>
         private Unit Watching(Ped me)
         {
             Unit best = null;
@@ -283,7 +305,44 @@ namespace Precinct88.Contact
                 best = unit;
             }
 
-            return best;
+            if (best != null) return best;
+
+            return Borrow(me);
+        }
+
+        /// <summary>
+        /// Somebody else's police car, for one stop.
+        ///
+        /// A MARKED CAR WITH AN OFFICER DRIVING IT, and both halves matter. An unmarked car is
+        /// not something a player would expect to be pulled over by, and a police car with
+        /// nobody at the wheel is scenery -- there are a great many of those parked outside
+        /// stations, and being pulled over by one would be memorable for the wrong reason.
+        /// </summary>
+        private Unit Borrow(Ped me)
+        {
+            try
+            {
+                foreach (var car in World.GetNearbyVehicles(me, NoticeRange))
+                {
+                    if (!Cops.Alive(car)) continue;
+
+                    var driver = car.Driver;
+                    if (!Cops.Alive(driver) || !Cops.IsCop(driver)) continue;
+
+                    // Sitting still with nobody going anywhere is a parked car, not a patrol.
+                    if (car.Speed < 0.6f) continue;
+
+                    if (!Cops.Sees(driver, me, NoticeRange)) continue;
+
+                    return _fleet.Adopt(car);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Could not look for a police car to borrow: " + ex.Message);
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -306,7 +365,13 @@ namespace Precinct88.Contact
                 // chance every two and a half seconds for speeding through Mission Row, a
                 // quarter for jumping a light in Rockford Hills, and appreciably less than
                 // either in Davis, where nobody cares.
-                var chance = 10f * weight * (0.35f + 0.9f * here.Attention);
+                // RAISED, BECAUSE IT WAS FIRING ONCE AN EVENING. The old numbers were tuned
+                // against a version that could only ever use our own three cars, so the real
+                // rate was this chance MULTIPLIED BY the odds of one of those being the nearest
+                // thing looking at you -- which is a much smaller number than it looks and was
+                // never written down anywhere. Now that any police car can do it, the chance
+                // means what it says.
+                var chance = 22f * weight * (0.35f + 0.9f * here.Attention);
 
                 return _rng.Next(100) < chance;
             }
@@ -786,6 +851,10 @@ namespace Precinct88.Contact
                     // Back on patrol from where he is standing. Fleet gives him somewhere
                     // proper to be on its next pass.
                     unit.BackToWork(unit.Car.Position);
+
+                    // And a borrowed car goes straight back to whoever it belonged to, rather
+                    // than lingering in the pool being steered by a mod that does not own it.
+                    _fleet.Hand(unit);
                 }
             }
             catch (Exception ex)
