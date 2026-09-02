@@ -70,6 +70,10 @@ namespace Precinct88.Streets
         public int Legs;
         public bool Adrift;
 
+        /// <summary>Since when he has been stood on tarmac, and when to look again.</summary>
+        public int OnRoadSince;
+        public int RoadCheckAt;
+
         public bool Alive => Cops.Alive(Who);
 
         /// <summary>
@@ -400,6 +404,15 @@ namespace Precinct88.Streets
 
                     var safe = got.GetResult<Vector3>();
                     if (safe == Vector3.Zero) continue;
+
+                    // NOT IN THE ROAD. GET_SAFE_COORD_FOR_PED answers "somewhere a ped can BE",
+                    // which rules out walls, water and roofs but not tarmac -- so without this
+                    // a fair share of foot patrols began their shift stood on a carriageway,
+                    // and every route they walked started from there.
+                    if (Function.Call<bool>(Hash.IS_POINT_ON_ROAD, safe.X, safe.Y, safe.Z, 0))
+                    {
+                        continue;
+                    }
 
                     // Not in front of him, same rule as the cars. Somebody fading in on a
                     // pavement is worse than a car doing it, because you are looking at the

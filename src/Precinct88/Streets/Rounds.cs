@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using GTA;
+using GTA.Math;
 using GTA.Native;
 using Precinct88.Core;
 
@@ -136,6 +137,13 @@ namespace Precinct88.Streets
 
                     if (now < walker.NextChoreAt) continue;
 
+                    // NOT IN THE ROAD. A chore stops him dead for up to half a minute, so
+                    // starting one while he happens to be crossing parks an officer in a live
+                    // lane writing on a clipboard -- which is a far more conspicuous version of
+                    // the same fault Route spends its time correcting. Waiting costs nothing:
+                    // he is walking somewhere anyway and the corner is a few seconds away.
+                    if (OnRoad(walker.Who.Position)) continue;
+
                     Begin(walker, now);
                 }
                 catch (Exception ex)
@@ -143,6 +151,27 @@ namespace Precinct88.Streets
                     Log.Debug("An officer's round went wrong: " + ex.Message);
                     Done(walker, now);
                 }
+            }
+        }
+
+        /// <summary>
+        /// Whether he is stood on a carriageway.
+        ///
+        /// The game's own answer rather than a distance to the nearest road node, because a
+        /// node is the CENTRELINE and says nothing useful about a wide junction or a slip road.
+        /// </summary>
+        private static bool OnRoad(Vector3 where)
+        {
+            try
+            {
+                return Function.Call<bool>(Hash.IS_POINT_ON_ROAD,
+                                           where.X, where.Y, where.Z, 0);
+            }
+            catch
+            {
+                // Cannot tell, so let him get on with it. Refusing every chore on an exception
+                // would quietly remove the whole behaviour.
+                return false;
             }
         }
 

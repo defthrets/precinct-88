@@ -58,6 +58,26 @@ namespace Precinct88.Streets
         /// <summary>How many legs may fail before he gives up on routes entirely.</summary>
         private const int GiveUpAfter = 2;
 
+        /// <summary>
+        /// How long he may be on a road before it stops being a crossing.
+        ///
+        /// THE WHOLE DIFFICULTY IS THAT BEING ON A ROAD IS SOMETIMES CORRECT. A route with
+        /// corners on both sides of a street REQUIRES him to cross one, and an officer who
+        /// refuses to step off the kerb is a worse bug than one who strolls up the middle. So
+        /// this is not a rule about roads, it is a rule about DWELLING on them: six seconds is
+        /// far longer than any crossing takes and far shorter than a walk down one.
+        /// </summary>
+        private const int RoadGraceMs = 6000;
+
+        /// <summary>How often the road check runs. It is two natives, but not free.</summary>
+        private const int RoadCheckMs = 1500;
+
+        /// <summary>How far out to look for a kerb when he needs putting back on one.</summary>
+        private static readonly float[] KerbTries = { 7f, 11f, 16f };
+
+        /// <summary>How many goes at placing one corner before it is left out.</summary>
+        private const int Tries = 5;
+
         private readonly Random _rng;
 
         public Route(Random rng)
@@ -120,6 +140,9 @@ namespace Precinct88.Streets
                 return;
             }
 
+            // Off the tarmac if he has been on it too long to be crossing.
+            if (Strolling(walker, now)) return;
+
             // Still going, and still within its time.
             if (now < walker.LegUntil) return;
 
@@ -156,6 +179,99 @@ namespace Precinct88.Streets
                 Log.Debug("Could not send an officer down a leg: " + ex.Message);
                 walker.Adrift = true;
             }
+        }
+
+        /// <summary>
+        /// Whether he is walking ALONG a road rather than across one, and putting him right.
+        ///
+        /// A CORNER OFF THE ROAD DOES NOT GUARANTEE A PATH OFF IT. Even with both ends on a
+        /// pavement, the nav mesh will happily route between them down a carriageway if that
+        /// is shorter -- it is solving for distance and has no opinion about kerbs. So the
+        /// waypoints being right fixed most of this and could never have fixed all of it.
+        ///
+        /// The grace is doing the real work. Crossing a road is not only allowed, it is
+        /// required by any route with corners on both sides of a street, and an officer who
+        /// will not step off a kerb looks far stupider than one who strolls up the middle. Six
+        /// seconds tells the two apart with room to spare.
+        ///
+        /// He is put on the nearest kerb and the leg is left running, so he rejoins his own
+        /// route rather than restarting it -- which is why he does not lose his place every
+        /// time he crosses a wide junction slowly.
+        /// </summary>
+        private bool Strolling(Walker walker, int now)
+        {
+            if (now < walker.RoadCheckAt) return false;
+            walker.RoadCheckAt = now + RoadCheckMs;
+
+            if (!OnRoad(walker.Who.Position))
+            {
+                walker.OnRoadSince = 0;
+                return false;
+            }
+
+            if (walker.OnRoadSince == 0)
+            {
+                walker.OnRoadSince = now;
+                return false;
+            }
+
+            if (now - walker.OnRoadSince < RoadGraceMs) return false;
+
+            walker.OnRoadSince = 0;
+
+            Vector3 kerb;
+            if (!Kerb(walker.Who.Position, out kerb)) return false;
+
+            try
+            {
+                Function.Call(Hash.TASK_FOLLOW_NAV_MESH_TO_COORD, walker.Who.Handle,
+                              kerb.X, kerb.Y, kerb.Z, Pace, 12000, 1.5f, 0, 0f);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Could not put an officer back on the kerb: " + ex.Message);
+                return false;
+            }
+
+            // The leg clock is pushed out rather than cleared, so the detour does not count
+            // against the leg and get it written off as a failure.
+            walker.LegUntil = now + LegMs;
+
+            Log.Debug("An officer was walking in the road; sent back to the pavement.");
+            return true;
+        }
+
+        /// <summary>
+        /// Somewhere off the road, near where he is standing.
+        ///
+        /// Outwards in rings rather than one guess, because the first safe coord the game
+        /// offers a man stood in a road is very often another part of the same road.
+        /// </summary>
+        private bool Kerb(Vector3 from, out Vector3 spot)
+        {
+            spot = Vector3.Zero;
+
+            for (var ring = 0; ring < KerbTries.Length; ring++)
+            {
+                var start = _rng.NextDouble() * Math.PI * 2d;
+
+                for (var i = 0; i < 6; i++)
+                {
+                    var a = start + Math.PI * 2d * i / 6d;
+
+                    var guess = from + new Vector3((float)Math.Cos(a) * KerbTries[ring],
+                                                   (float)Math.Sin(a) * KerbTries[ring], 0f);
+
+                    Vector3 safe;
+                    if (!Pavement(guess, out safe)) continue;
+                    if (OnRoad(safe)) continue;
+
+                    spot = safe;
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -205,16 +321,75 @@ namespace Precinct88.Streets
                 var angle = start + turn * i + (_rng.NextDouble() - 0.5d) * turn * 0.66d;
                 var dist = LegMin + (float)_rng.NextDouble() * (LegMax - LegMin);
 
-                var guess = post + new Vector3((float)Math.Cos(angle) * dist,
-                                               (float)Math.Sin(angle) * dist, 0f);
-
                 Vector3 safe;
-                if (!Pavement(guess, out safe)) continue;
+                if (!Corner(post, angle, dist, out safe)) continue;
 
                 found.Add(safe);
             }
 
             return found.Count < 2 ? null : found;
+        }
+
+        /// <summary>
+        /// One corner, tried a few times before giving up on it.
+        ///
+        /// THE SINGLE ATTEMPT WAS THE BUG. Each corner got exactly one roll of
+        /// GET_SAFE_COORD_FOR_PED, and that native answers "somewhere a ped can BE", which
+        /// includes the middle of a carriageway -- it rules out walls, water and roofs, not
+        /// tarmac. So roughly one corner in three landed on a road, the officer dutifully
+        /// walked to it, and the route took him up the white line.
+        ///
+        /// Now every candidate is checked against IS_POINT_ON_ROAD and rejected if it is on
+        /// one, with the angle nudged a little each go. Five tries is plenty: a corner that
+        /// cannot be placed off-road in five is somewhere there is no pavement, and a
+        /// three-corner round is still a round.
+        /// </summary>
+        private bool Corner(Vector3 post, double angle, float dist, out Vector3 spot)
+        {
+            spot = Vector3.Zero;
+
+            for (var i = 0; i < Tries; i++)
+            {
+                // Nudged rather than re-rolled, so a corner that has to move still ends up
+                // roughly where the shape wanted it.
+                var a = angle + (_rng.NextDouble() - 0.5d) * 0.9d;
+                var d = dist * (0.75f + (float)_rng.NextDouble() * 0.5f);
+
+                var guess = post + new Vector3((float)Math.Cos(a) * d,
+                                               (float)Math.Sin(a) * d, 0f);
+
+                Vector3 safe;
+                if (!Pavement(guess, out safe)) continue;
+
+                if (OnRoad(safe)) continue;
+
+                spot = safe;
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Whether a point is on a carriageway.
+        ///
+        /// The game's own answer, and the reason this is a native rather than a distance to
+        /// the nearest road node: a node is the CENTRELINE, so measuring to it says nothing
+        /// useful about a wide junction, a slip road, or a car park.
+        /// </summary>
+        private static bool OnRoad(Vector3 where)
+        {
+            try
+            {
+                return Function.Call<bool>(Hash.IS_POINT_ON_ROAD,
+                                           where.X, where.Y, where.Z, 0);
+            }
+            catch
+            {
+                // Cannot tell, so allow it. Refusing every corner on an exception would leave
+                // every officer in the game wandering.
+                return false;
+            }
         }
 
         /// <summary>
