@@ -583,12 +583,28 @@ namespace Precinct88.Custody
                 return;
             }
 
-            // Still on the floor. Nothing starts until he is back on his feet, or the cuffs go
-            // on to a man mid-ragdoll and the scene spends its length fighting the physics.
-            if (_tackle && now - _tackledAt < TackleMs)
+            // STILL ON THE FLOOR. Nothing starts until he is genuinely back on his feet.
+            //
+            // THE TIMER ALONE WAS NOT ENOUGH and that is what put him in the road. A ragdoll
+            // does not end when its duration does -- the ped then has to get UP, which takes
+            // its own second or so, and starting a standing animation during that plays a
+            // man's full height from a body lying flat. The scene wins, the mesh does not
+            // follow, and he is cuffed halfway through the tarmac.
+            //
+            // So it waits for the clock AND for the physics to be finished with him, with a
+            // ceiling on the wait in case he has landed somewhere he cannot get up from.
+            if (_tackle && now - _tackledAt < TackleMs + 6000)
             {
-                Screen.Help("Taken down.");
-                return;
+                var upright = now - _tackledAt >= TackleMs &&
+                              !me.IsRagdoll &&
+                              !Function.Call<bool>(Hash.IS_PED_GETTING_UP, me.Handle) &&
+                              !Function.Call<bool>(Hash.IS_PED_FALLING, me.Handle);
+
+                if (!upright)
+                {
+                    Screen.Help("Taken down.");
+                    return;
+                }
             }
 
             // THE ARREST ITSELF, STARTED ONCE. Both halves of a paired clip on one clock --
@@ -617,8 +633,23 @@ namespace Precinct88.Custody
 
                 var facing = (float)(Math.Atan2(-dir.X, dir.Y) * 180d / Math.PI);
 
+                var anchor = me.Position - dir * 0.85f;
+
+                // AND PUT ON THE GROUND, not on whatever height the player happened to be at.
+                // A synchronised scene is authored from the floor up, so its origin has to BE
+                // the floor -- take it off a ped mid-stumble, on a kerb, or halfway out of a
+                // ragdoll and the whole performance plays at that height, which is how two
+                // people end up cuffing each other inside the road.
+                var ground = new OutputArgument();
+
+                if (Function.Call<bool>(Hash.GET_GROUND_Z_FOR_3D_COORD,
+                                        anchor.X, anchor.Y, anchor.Z + 1f, ground, false))
+                {
+                    anchor.Z = ground.GetResult<float>();
+                }
+
                 _scene = Anim.Pair(_officer, Anim.CopCuffs, me, Anim.CrookCuffed,
-                                   Anim.ArrestDict, me.Position - dir * 0.85f, facing);
+                                   Anim.ArrestDict, anchor, facing);
 
                 if (_scene < 0)
                 {

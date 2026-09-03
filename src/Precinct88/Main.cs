@@ -143,6 +143,10 @@ namespace Precinct88
             // the ordinary case and means guns only.
             _search.Seize = why => Seize(why);
 
+            // Nobody points anything at a man who is already in handcuffs. See
+            // Restraint.HoldFire for why this cannot simply be done by ignoring the player.
+            _restraint.HoldFire = () => _search.Running;
+
             // THE BRIDGE, SET LAST, so nothing on the other side can see a half-built mod.
             // Dispatch.Ready() is false until these lines run.
             Dispatch.Calls = _callout;

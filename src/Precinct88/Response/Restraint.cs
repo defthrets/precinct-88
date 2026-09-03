@@ -162,6 +162,21 @@ namespace Precinct88.Response
         /// <summary>Whether the police are currently allowed to shoot. Read by the search.</summary>
         public bool Lethal { get; private set; }
 
+        /// <summary>
+        /// Nobody fires anything at all. Wired by Main to whether a detention is running.
+        ///
+        /// THE ARREST HAS TO RELEASE THE POLICE TO WORK, and that is the hole this fills. The
+        /// engine's bust is an event like any other, so an officer with events blocked cannot
+        /// start one -- which means handing the police back at the moment the cuffs go on. And
+        /// handing them back frees every OTHER officer stood around to carry on doing what they
+        /// were doing, which was tasing you.
+        ///
+        /// Ignoring the player is not available: the same call that stops them attacking stops
+        /// the arrest. So they keep their orders and lose their weapons, which is the one lever
+        /// that separates the two.
+        /// </summary>
+        public Func<bool> HoldFire;
+
         public void Update()
         {
             if (!_cfg.LethalEscalation) return;
@@ -176,6 +191,8 @@ namespace Precinct88.Response
                 if (me == null || !me.Exists()) return;
 
                 var stars = Game.Player.Wanted.WantedLevel;
+
+                var holding = HoldFire != null && HoldFire();
 
                 // A DRAWN GUN OUTRANKS THE STAR COUNT -- it is the rule the stars were
                 // always a proxy for. The ladder exists because a man who shoved somebody
@@ -240,6 +257,20 @@ namespace Precinct88.Response
                     //
                     // So the rule keeps its shape and gains one exception: a man being shot at
                     // gets his sidearm back regardless of what you are up to.
+                    // NOTHING IN ANYBODY'S HANDS WHILE SOMEBODY IS BEING ARRESTED. Before the
+                    // ladder, before the exceptions -- a man in handcuffs is not a threat to
+                    // anybody and the officers around him have no business holding anything.
+                    if (holding)
+                    {
+                        if (_drawn.Remove(ped.Handle) || !_stunned.Contains(ped.Handle))
+                        {
+                            ped.Weapons.RemoveAll();
+                            _stunned.Add(ped.Handle);
+                        }
+
+                        continue;
+                    }
+
                     if (Lethal || Threatened(ped, me)) { Arm(ped); continue; }
 
                     Disarm(ped);
