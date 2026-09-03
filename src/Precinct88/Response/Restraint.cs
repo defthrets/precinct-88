@@ -231,7 +231,16 @@ namespace Precinct88.Response
                     if (!Cops.Alive(ped)) continue;
                     if (!Cops.IsCop(ped)) continue;
 
-                    if (Lethal) { Arm(ped); continue; }
+                    // THE LADDER IS ABOUT THE PLAYER. IT WAS BEING APPLIED TO EVERYONE.
+                    //
+                    // Lethal is decided by your star count and your gun, which is right -- and
+                    // it was setting what every officer in the district CARRIED, which is not.
+                    // An officer in a gunfight with somebody who is not you had a stun gun, or
+                    // beyond nine metres nothing at all, because YOU had not done anything.
+                    //
+                    // So the rule keeps its shape and gains one exception: a man being shot at
+                    // gets his sidearm back regardless of what you are up to.
+                    if (Lethal || Threatened(ped, me)) { Arm(ped); continue; }
 
                     Disarm(ped);
                     Reach(ped, ped.Position.DistanceTo(me.Position));
@@ -345,6 +354,53 @@ namespace Precinct88.Response
             catch (Exception ex)
             {
                 Log.Debug("Could not stand the police down: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Whether this officer is in a fight with somebody who is not you.
+        ///
+        /// HIS TARGET, NOT THE NEIGHBOURHOOD. Asking "is anybody shooting near him" would arm
+        /// every officer on the block the moment a gang war started three streets away, which
+        /// hands out sidearms for something none of them can see. GET_PED_TARGET_FROM_COMBAT_PED
+        /// asks the one question that matters: who is HE fighting.
+        ///
+        /// The player is excluded deliberately and it is the whole point of the check. An
+        /// officer fighting YOU is exactly the case the stun guns exist for, and letting combat
+        /// alone re-arm him would undo the entire ladder in the first second of every chase.
+        ///
+        /// Armed, not merely present. A man throwing punches is a man to be tasered; the
+        /// exception is for people who are shooting.
+        /// </summary>
+        private static bool Threatened(Ped officer, Ped me)
+        {
+            try
+            {
+                if (!Function.Call<bool>(Hash.IS_PED_IN_COMBAT, officer.Handle, 0)) return false;
+
+                var target = Function.Call<int>(Hash.GET_PED_TARGET_FROM_COMBAT_PED,
+                                                officer.Handle, 0);
+
+                if (target == 0) return false;
+                if (me != null && me.Exists() && target == me.Handle) return false;
+
+                // Entity.FromHandle rather than new Ped(handle): SHVDN 3.9 removed the public
+                // constructor, and the cast is what tells us the handle is still a ped at all
+                // rather than one recycled onto something else.
+                var who = Entity.FromHandle(target) as Ped;
+
+                if (!Cops.Alive(who)) return false;
+
+                // Somebody with a gun, or somebody firing one. The second catches the moment
+                // before a weapon is registered as equipped, which is the moment it matters.
+                return Cops.HasGun(who) ||
+                       Function.Call<bool>(Hash.IS_PED_SHOOTING, who.Handle);
+            }
+            catch
+            {
+                // Cannot tell, so leave the ladder alone. Arming everybody on an exception
+                // would be the failure mode with teeth.
+                return false;
             }
         }
 
