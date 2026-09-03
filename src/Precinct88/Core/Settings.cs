@@ -62,7 +62,7 @@ namespace Precinct88.Core
         /// of these and Davis at midnight gets all of them; see World.Districts for the
         /// weights that actually decide.
         /// </summary>
-        public int PatrolUnits = 3;
+        public int PatrolUnits = 6;
 
         /// <summary>
         /// Whether to switch off the game's own random police.

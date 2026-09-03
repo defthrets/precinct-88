@@ -32,12 +32,31 @@ namespace Precinct88.Streets
         private const float SpawnNear = 110f;
         private const float SpawnFar = 220f;
 
-        /// <summary>Past this and they are somebody else's problem.</summary>
-        private const float LetGoRange = 340f;
+        /// <summary>
+        /// Past this and they are somebody else's problem.
+        ///
+        /// Raised with the budget. A bigger pool spread over the same distance is a bigger
+        /// pool being deleted at the same rate, and letting go at three hundred and forty
+        /// metres meant a car was released about as fast as one arrived the moment you were
+        /// driving rather than walking.
+        /// </summary>
+        private const float LetGoRange = 430f;
 
-        /// <summary>How long between one unit going out and the next, before the dice.</summary>
-        private const int GapMinMs = 24000;
-        private const int GapMaxMs = 70000;
+        /// <summary>
+        /// How long between one unit going out and the next, before the dice.
+        ///
+        /// THE POOL WAS TAKING LONGER TO FILL THAN A UNIT STAYS OUT, which is the quiet reason
+        /// the streets looked empty however high the budget went. At twenty-four to seventy
+        /// seconds a district wanting six cars needs four minutes to reach six -- and a round
+        /// only lasts eleven, so a third of every unit's life was spent waiting for the rest of
+        /// the shift to turn up. The target was real and almost never met.
+        ///
+        /// Faster now. It still puts them out ONE AT A TIME, out of sight, and they still have
+        /// to drive from wherever they appeared -- none of the argument changes. The pool just
+        /// reaches its own number before half of it has gone home.
+        /// </summary>
+        private const int GapMinMs = 9000;
+        private const int GapMaxMs = 26000;
 
         /// <summary>And how long during a response, when the patch rhythm is the wrong one.</summary>
         private const int SurgeGapMs = 3500;
