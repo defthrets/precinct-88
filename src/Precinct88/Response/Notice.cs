@@ -157,9 +157,6 @@ namespace Precinct88.Response
         private const int CallInMinMs = 4500;
         private const int CallInMaxMs = 10000;
 
-        /// <summary>How recent one of the engine's "time since" answers counts as now.</summary>
-        private const int JustNowMs = 1500;
-
         /// <summary>
         /// How long before an officer who let something go looks at it again.
         ///
@@ -238,9 +235,6 @@ namespace Precinct88.Response
 
                 new Misdeed("a car being taken", 1, false, 18000, 75, "key.png",
                             me => Function.Call<bool>(Hash.IS_PED_JACKING, me.Handle)),
-
-                new Misdeed("a car driven at people", 1, false, 12000, 70, "runover.png",
-                            me => Driving(me) && Since(Hash.GET_TIME_SINCE_PLAYER_HIT_PED)),
 
                 new Misdeed("a fight in the street", 1, false, 14000, 40, "fist.png",
                             me => Function.Call<bool>(Hash.IS_PED_IN_MELEE_COMBAT, me.Handle)),
@@ -558,33 +552,6 @@ namespace Precinct88.Response
         }
 
         // ---- the tests ---------------------------------------------------------
-
-        /// <summary>Driving, rather than a passenger in something.</summary>
-        private static bool Driving(Ped me)
-        {
-            if (!me.IsInVehicle()) return false;
-
-            var car = me.CurrentVehicle;
-            if (!Cops.Alive(car)) return false;
-
-            return car.Driver != null && car.Driver.Handle == me.Handle;
-        }
-
-        /// <summary>
-        /// Whether one of the engine's own "time since" counters just tripped.
-        ///
-        /// These return milliseconds since the thing last happened, and a very large number if
-        /// it never has -- so "recently" is simply a small answer. The engine keeps this
-        /// bookkeeping for its own wanted system whether or not anything reads it, which makes
-        /// it far better than trying to work out from a heading and a road node whether
-        /// somebody is on the wrong side of the carriageway.
-        /// </summary>
-        private static bool Since(Hash what)
-        {
-            var ms = Function.Call<int>(what, Game.Player.Handle);
-
-            return ms >= 0 && ms < JustNowMs;
-        }
 
         /// <summary>A gun, as opposed to a bat, a phone, or empty hands.</summary>
         private static bool Firearm(Ped me)
